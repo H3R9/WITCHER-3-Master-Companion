@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+@theme {
+  --font-cinzel: "Cinzel", serif;
+  --font-inter: "Inter", sans-serif;
+  --color-witcher-gold: #c5a059;
+  --color-witcher-dark: #0c0c0c;
+  --color-witcher-parchment: #1a1612;
+  --color-witcher-red: #8b0000;
+}
+
+@layer base {
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+
+  body {
+    @apply bg-witcher-dark text-gray-200 font-inter;
+    background-image: 
+      radial-gradient(circle at center, rgba(197, 160, 89, 0.05) 0%, transparent 70%),
+      url('https://www.transparenttextures.com/patterns/dark-leather.png');
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-cinzel text-witcher-gold tracking-wider;
+  }
+}
+
+.parchment-card {
+  @apply bg-witcher-parchment border border-witcher-gold/30 rounded-sm shadow-2xl relative overflow-hidden;
+  background-image: 
+    /* Top-left corner */
+    linear-gradient(to right, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    linear-gradient(to bottom, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    /* Top-right corner */
+    linear-gradient(to left, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    linear-gradient(to bottom, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    /* Bottom-left corner */
+    linear-gradient(to right, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    linear-gradient(to top, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    /* Bottom-right corner */
+    linear-gradient(to left, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    linear-gradient(to top, rgba(197, 160, 89, 0.4) 2px, transparent 2px),
+    url('https://www.transparenttextures.com/patterns/papyros.png');
+  background-position: 
+    6px 6px, 6px 6px,
+    calc(100% - 6px) 6px, calc(100% - 6px) 6px,
+    6px calc(100% - 6px), 6px calc(100% - 6px),
+    calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) calc(100% - 6px),
+    0 0;
+  background-size: 
+    16px 16px, 16px 16px,
+    16px 16px, 16px 16px,
+    16px 16px, 16px 16px,
+    16px 16px, 16px 16px,
+    auto;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  box-shadow: inset 0 0 80px rgba(0,0,0,0.6), 0 10px 30px rgba(0,0,0,0.8);
+}
+
+.parchment-card::before {
+  content: '';
+  @apply absolute inset-0 pointer-events-none z-0;
+  border: 1px solid rgba(197, 160, 89, 0.1);
+  margin: 4px;
+}
+
+.parchment-card::after {
+  content: '';
+  @apply absolute inset-0 opacity-5 pointer-events-none z-0;
+  background: radial-gradient(circle at 50% 50%, #c5a059 0%, transparent 80%);
+}
+
+.witcher-button {
+  @apply px-8 py-3 bg-transparent border-2 border-witcher-gold text-witcher-gold font-cinzel 
+         uppercase tracking-widest transition-all duration-300 hover:bg-witcher-gold 
+         hover:text-black hover:shadow-[0_0_20px_rgba(197,160,89,0.4)] active:scale-95 
+         disabled:opacity-30 disabled:cursor-not-allowed;
+}
+
+.witcher-input {
+  @apply bg-black/40 border border-witcher-gold/20 rounded px-4 py-2 focus:border-witcher-gold outline-none transition-all text-white;
+}
+
+/* Witcher Embers Effect */
+@keyframes float-embers {
+  0% { transform: translateY(0) translateX(0) rotate(0); opacity: 0; }
+  20% { opacity: 0.4; }
+  80% { opacity: 0.2; }
+  100% { transform: translateY(-100vh) translateX(20px) rotate(360deg); opacity: 0; }
+}
+
+.ember {
+  @apply absolute w-1 h-1 bg-witcher-gold rounded-full pointer-events-none opacity-0;
+  filter: blur(1px) drop-shadow(0 0 5px #c5a059);
+  animation: float-embers var(--duration) linear infinite;
+  left: var(--left);
+  animation-delay: var(--delay);
+}
+
+/* Custom scrollbar for that Witcher feel */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-witcher-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-witcher-gold/30 rounded hover:bg-witcher-gold/50;
+}
+
+/* Immersive Witcher Effects */
+.vignette {
+  @apply fixed inset-0 pointer-events-none z-[101];
+  background: radial-gradient(circle, transparent 20%, rgba(0,0,0,0.2) 70%, rgba(0,0,0,0.6) 100%);
+}
+
+.fog-container {
+  @apply fixed inset-0 pointer-events-none z-[1];
+  overflow: hidden;
+}
+
+.fog-layer {
+  @apply absolute inset-0 opacity-20;
+  background: url('https://www.transparenttextures.com/patterns/fog.png');
+  animation: fog-move 60s linear infinite;
+}
+
+.fog-layer-2 {
+  @apply absolute inset-0 opacity-10;
+  background: url('https://www.transparenttextures.com/patterns/fog.png');
+  animation: fog-move-reverse 45s linear infinite;
+  filter: blur(4px);
+}
+
+@keyframes fog-move {
+  from { background-position: 0 0; }
+  to { background-position: 1000px 500px; }
+}
+
+@keyframes fog-move-reverse {
+  from { background-position: 1000px 500px; }
+  to { background-position: 0 0; }
+}
+
+.pulse-gold {
+  animation: pulse-gold 4s ease-in-out infinite;
+}
+
+@keyframes pulse-gold {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(197, 160, 89, 0.4)); }
+  50% { filter: drop-shadow(0 0 15px rgba(197, 160, 89, 0.8)); }
+}
+
+.ken-burns {
+  animation: ken-burns 30s ease-in-out infinite alternate;
+}
+
+@keyframes ken-burns {
+  0% { transform: scale(1) translate(0, 0); }
+  100% { transform: scale(1.03) translate(-1%, -1%); }
+}
+
+.spectral-skull {
+  @apply text-red-900/40;
+  filter: drop-shadow(0 0 10px rgba(139, 0, 0, 0.2));
+  animation: spectral-pulse 5s ease-in-out infinite;
+}
+
+@keyframes spectral-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); filter: drop-shadow(0 0 10px rgba(139, 0, 0, 0.2)); }
+  50% { opacity: 0.6; transform: scale(1.05); filter: drop-shadow(0 0 25px rgba(139, 0, 0, 0.5)); }
+}
