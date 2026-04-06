@@ -25,7 +25,13 @@ import {
   Share2,
   Wind,
   Shield,
-  Hammer
+  Hammer,
+  RefreshCw,
+  Droplet,
+  Flame,
+  Bomb,
+  Activity,
+  Crosshair
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
@@ -33,8 +39,27 @@ import backgroundImage from './witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh.j
 
 // --- Types ---
 
-type Step = 'MAIN_MENU' | 'INPUT' | 'OCR' | 'CONFIRM' | 'ANALYSIS' | 'DASHBOARD' | 'MERCHANT_INPUT' | 'MERCHANT_ANALYSIS' | 'MERCHANT_DASHBOARD' | 'GWENT_INPUT' | 'GWENT_ANALYSIS' | 'GWENT_DASHBOARD' | 'BESTIARY_INPUT' | 'BESTIARY_ANALYSIS' | 'BESTIARY_DASHBOARD' | 'GEAR_INPUT' | 'GEAR_ANALYSIS' | 'GEAR_DASHBOARD';
-type AppMode = 'QUESTS' | 'MERCHANT' | 'GWENT' | 'BESTIARY' | 'GEAR';
+type Step = 'MAIN_MENU' | 'INPUT' | 'OCR' | 'CONFIRM' | 'ANALYSIS' | 'DASHBOARD' | 'MERCHANT_INPUT' | 'MERCHANT_ANALYSIS' | 'MERCHANT_DASHBOARD' | 'GWENT_INPUT' | 'GWENT_ANALYSIS' | 'GWENT_DASHBOARD' | 'BESTIARY_INPUT' | 'BESTIARY_ANALYSIS' | 'BESTIARY_DASHBOARD' | 'GEAR_INPUT' | 'GEAR_ANALYSIS' | 'GEAR_DASHBOARD' | 'FINDER_INPUT' | 'FINDER_ANALYSIS' | 'FINDER_DASHBOARD';
+type AppMode = 'QUESTS' | 'MERCHANT' | 'GWENT' | 'BESTIARY' | 'GEAR' | 'FINDER';
+
+interface FinderAnalysisResult {
+  itemName: string;
+  description: string;
+  bestLocations: {
+    name: string;
+    region: string;
+    details: string;
+    dropRate?: string;
+  }[];
+  stepByStepGuide: string[];
+  alternatives: {
+    name: string;
+    reason: string;
+  }[];
+  requirements: string;
+  tips: string[];
+  humor: string;
+}
 
 interface GearAnalysisResult {
   schoolName: string;
@@ -164,6 +189,7 @@ interface AnalysisResult {
     secondary: number;
     contracts: number;
   };
+  orderJustification: string;
   recommendations: {
     questId: string;
     priority: 'Alta' | 'Média' | 'Baixa';
@@ -272,7 +298,14 @@ const LoadingOverlay = ({ currentStep, appMode }: { currentStep: Step, appMode: 
     "Buscando o mestre ferreiro em Novigrad...",
     "Polindo a armadura do Lobo..."
   ];
-  const loadingPhrases = appMode === 'QUESTS' ? questPhrases : (appMode === 'MERCHANT' ? merchantPhrases : (appMode === 'GWENT' ? gwentPhrases : (appMode === 'BESTIARY' ? bestiaryPhrases : gearPhrases)));
+  const finderPhrases = [
+    "Farejando rastros com sentidos de bruxo...",
+    "Consultando informantes em Novigrad...",
+    "Procurando rotas de contrabando em Skellige...",
+    "Analisando o mercado negro de Velen...",
+    "Seguindo as pegadas no lodo..."
+  ];
+  const loadingPhrases = appMode === 'QUESTS' ? questPhrases : (appMode === 'MERCHANT' ? merchantPhrases : (appMode === 'GWENT' ? gwentPhrases : (appMode === 'BESTIARY' ? bestiaryPhrases : (appMode === 'FINDER' ? finderPhrases : gearPhrases))));
   const [phraseIdx, setPhraseIdx] = useState(0);
 
   useEffect(() => {
@@ -398,6 +431,11 @@ export default function App() {
     const saved = localStorage.getItem('witcher_gear_analysis');
     return saved ? JSON.parse(saved) : null;
   });
+  const [finderQuery, setFinderQuery] = useState<string>(() => localStorage.getItem('witcher_finder_query') || '');
+  const [finderAnalysis, setFinderAnalysis] = useState<FinderAnalysisResult | null>(() => {
+    const saved = localStorage.getItem('witcher_finder_analysis');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [quests, setQuests] = useState<Quest[]>(() => {
     const saved = localStorage.getItem('witcher_quests');
     return saved ? JSON.parse(saved) : [];
@@ -421,14 +459,16 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('witcher_app_mode', appMode);
     localStorage.setItem('witcher_current_step', currentStep);
+    localStorage.setItem('witcher_finder_query', finderQuery);
     if (merchantAnalysis) localStorage.setItem('witcher_merchant_analysis', JSON.stringify(merchantAnalysis));
     if (gwentAnalysis) localStorage.setItem('witcher_gwent_analysis', JSON.stringify(gwentAnalysis));
     if (bestiaryAnalysis) localStorage.setItem('witcher_bestiary_analysis', JSON.stringify(bestiaryAnalysis));
     if (gearAnalysis) localStorage.setItem('witcher_gear_analysis', JSON.stringify(gearAnalysis));
+    if (finderAnalysis) localStorage.setItem('witcher_finder_analysis', JSON.stringify(finderAnalysis));
     if (quests.length > 0) localStorage.setItem('witcher_quests', JSON.stringify(quests));
     if (analysis) localStorage.setItem('witcher_quest_analysis', JSON.stringify(analysis));
     localStorage.setItem('witcher_objectives', JSON.stringify(completedObjectives));
-  }, [appMode, currentStep, merchantAnalysis, gwentAnalysis, quests, analysis, completedObjectives]);
+  }, [appMode, currentStep, finderQuery, merchantAnalysis, gwentAnalysis, bestiaryAnalysis, gearAnalysis, finderAnalysis, quests, analysis, completedObjectives]);
 
   const handleReset = () => {
     if (window.confirm('Deseja limpar todos os dados e meditar (recomeçar)?')) {
@@ -545,12 +585,9 @@ export default function App() {
         ${JSON.stringify(quests)}
 
         REQUISITOS CRÍTICOS DE ESTRATÉGIA:
-        1. ORDEM DE MISSÕES (SEQUÊNCIA EXATA): Determine a sequência EXATA que o jogador deve seguir para NÃO PERDER NENHUMA MISSÃO. 
-           - Verifique dependências CRÍTICAS (ex: Corridas em Poleiro do Corvo deve ser feita ANTES de avançar demais em Assuntos de Família).
-           - Identifique missões que falham se outras forem concluídas.
-           - Explique interligações complexas. Por exemplo, como intercalar "Assuntos de Família" e "Senhoras da Floresta" para o melhor resultado narrativo e de sobrevivência.
-        2. MISSÕES PERDÍVEIS (MISSABLE): Seja extremamente rigoroso. Se uma missão secundária ou contrato puder falhar ao avançar na história principal, avise IMEDIATAMENTE e coloque-a ANTES na sequência.
-        3. MELHORES ESCOLHAS: Guie o jogador para as escolhas que levam aos finais mais satisfatórios ou recompensas raras (ex: salvar o Barão Sangrento, obter a espada Aerondight, etc).
+        1. PRIORIZAÇÃO AUTOMATIZADA: Crie uma sequência recomendada priorizando Missões Principais adequadas ao nível e localização atual, seguidas por Missões Secundárias e Contratos de Bruxo.
+        2. PREVENÇÃO DE FALHAS (100% COMPLETION): Verifique rigorosamente se uma missão não cancela a outra. Missões perdíveis DEVEM ser priorizadas antes dos pontos de não retorno (point of no return).
+        3. JUSTIFICATIVA DA ORDEM: Forneça uma justificativa clara para a ordem sugerida no campo "orderJustification", focando especialmente nas missões principais (se houver 5 ou mais, explique o fluxo entre elas).
         4. "nextSteps" DEVE ser uma instrução clara, estratégica e acionável.
         5. "recommendedSequence" DEVE ser um array com os IDs das missões na ordem exata de execução sugerida. Esta é a sua recomendação mestre.
         6. "interconnections" deve explicar como missões específicas se entrelaçam e qual a melhor forma de progredir nelas simultaneamente.
@@ -577,6 +614,7 @@ export default function App() {
                 },
                 required: ["main", "secondary", "contracts"]
               },
+              orderJustification: { type: Type.STRING },
               recommendations: {
                 type: Type.ARRAY,
                 items: {
@@ -688,7 +726,7 @@ export default function App() {
               },
               humor: { type: Type.STRING }
             },
-            required: ["summary", "recommendations", "recommendedSequence", "interconnections", "choices", "warnings", "combatTips", "gwentTips", "buildAdvice", "generalTips", "mapHighlights", "humor"]
+            required: ["summary", "orderJustification", "recommendations", "recommendedSequence", "interconnections", "choices", "warnings", "combatTips", "gwentTips", "buildAdvice", "generalTips", "mapHighlights", "humor"]
           }
         }
       });
@@ -1127,6 +1165,100 @@ export default function App() {
     }
   };
 
+  const runFinderAnalysis = async () => {
+    if (!finderQuery.trim()) {
+      setError("Por favor, diga o que você está procurando.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setCurrentStep('FINDER_ANALYSIS');
+
+    try {
+      const prompt = `
+        Você é o Maior Rastreador do Continente em The Witcher 3 (v4.0+).
+        O usuário está procurando por: "${finderQuery}".
+        Nível atual do Geralt: ${userData.level}.
+        Localização atual: ${userData.location || 'Desconhecida'}.
+        
+        Forneça um guia definitivo, passo a passo e à prova de falhas de como conseguir esse item, material, arma, armadura, comida ou objetivo da melhor forma possível.
+        
+        REGRAS DE ANÁLISE CRÍTICAS:
+        1. LOCALIZAÇÕES EXATAS: Diga exatamente onde ir (região, ponto de viagem rápida mais próximo, vendedor específico).
+        2. ADEQUAÇÃO AO NÍVEL: Considere o nível ${userData.level} do jogador. Não mande um jogador nível 5 para Skellige enfrentar um monstro nível 30, a menos que seja a única forma (e avise do perigo).
+        3. PASSO A PASSO: Crie um guia claro de como obter o item.
+        4. ALTERNATIVAS: Se o item for muito difícil de conseguir agora, sugira alternativas viáveis para o nível atual.
+        5. DICAS DE FARM/ECONOMIA: Como conseguir mais disso de forma eficiente?
+        
+        Retorne um objeto JSON seguindo o esquema definido.
+        Use um tom de voz de um bruxo experiente dando conselhos de sobrevivência.
+        Idioma: Português Brasileiro.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: prompt,
+        config: { 
+          tools: [{ googleSearch: {} }],
+          toolConfig: { includeServerSideToolInvocations: true },
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              itemName: { type: Type.STRING },
+              description: { type: Type.STRING },
+              bestLocations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    region: { type: Type.STRING },
+                    details: { type: Type.STRING },
+                    dropRate: { type: Type.STRING }
+                  },
+                  required: ["name", "region", "details"]
+                }
+              },
+              stepByStepGuide: { type: Type.ARRAY, items: { type: Type.STRING } },
+              alternatives: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    reason: { type: Type.STRING }
+                  },
+                  required: ["name", "reason"]
+                }
+              },
+              requirements: { type: Type.STRING },
+              tips: { type: Type.ARRAY, items: { type: Type.STRING } },
+              humor: { type: Type.STRING }
+            },
+            required: ["itemName", "description", "bestLocations", "stepByStepGuide", "alternatives", "requirements", "tips", "humor"]
+          }
+        }
+      });
+
+      const result = parseJSON(response.text || "{}", {});
+      result.bestLocations = result.bestLocations || [];
+      result.stepByStepGuide = result.stepByStepGuide || [];
+      result.alternatives = result.alternatives || [];
+      result.tips = result.tips || [];
+      
+      setFinderAnalysis(result);
+      setCurrentStep('FINDER_DASHBOARD');
+    } catch (err) {
+      console.error(err);
+      setError("Erro ao rastrear o item. Verifique sua conexão e tente novamente.");
+      setCurrentStep('FINDER_INPUT');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const runGearAnalysis = async () => {
     if (gearImages.length === 0) {
       setError("Por favor, envie pelo menos uma imagem do seu inventário ou de um diagrama de equipamento.");
@@ -1307,8 +1439,6 @@ export default function App() {
           ))}
         </div>
 
-
-
         <div className="relative z-30 flex flex-col space-y-12 max-w-2xl">
           <div className="space-y-2">
             <h1 
@@ -1332,6 +1462,7 @@ export default function App() {
               { id: 'GWENT', label: 'Estrategista de Gwent', step: 'GWENT_INPUT', icon: <Trophy className="w-6 h-6" /> },
               { id: 'BESTIARY', label: 'Mestre do Bestiário', step: 'BESTIARY_INPUT', icon: <Skull className="w-6 h-6" /> },
               { id: 'GEAR', label: 'Mestre Armeiro', step: 'GEAR_INPUT', icon: <Sword className="w-6 h-6" /> },
+              { id: 'FINDER', label: 'Mestre Rastreador', step: 'FINDER_INPUT', icon: <Search className="w-6 h-6" /> },
             ].map((item) => (
               <button
                 key={item.id}
@@ -1622,6 +1753,43 @@ export default function App() {
   const renderDashboard = () => {
     if (!analysis) return null;
 
+    const renderQuestInfographic = () => {
+      if (!analysis.recommendedSequence || analysis.recommendedSequence.length === 0) return null;
+      
+      return (
+        <div className="mb-12 parchment-card p-6 overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[radial-gradient(circle_at_top_right,rgba(197,160,89,0.1)_0%,transparent_70%)] pointer-events-none" />
+          <h3 className="text-xl font-cinzel text-witcher-gold mb-6 flex items-center gap-2">
+            <MapIcon className="w-5 h-5"/> Caminho do Destino (Linha do Tempo)
+          </h3>
+          <div className="flex items-center overflow-x-auto pb-6 snap-x [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:bg-witcher-gold/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-black/20">
+            {analysis.recommendedSequence.map((questId, i) => {
+              const quest = quests.find(q => q.id === questId);
+              const rec = analysis.recommendations?.find(r => r.questId === questId);
+              if (!quest) return null;
+              
+              const isHighPriority = rec?.priority === 'Alta';
+              
+              return (
+                <div key={i} className="flex items-center shrink-0 snap-center">
+                  <div className={`flex flex-col items-center w-32 text-center relative group`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 z-10 bg-black transition-all duration-300 ${isHighPriority ? 'border-red-500 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.5)] group-hover:scale-110' : 'border-witcher-gold text-witcher-gold group-hover:scale-110 group-hover:shadow-[0_0_15px_rgba(197,160,89,0.5)]'}`}>
+                      {quest.type === 'Principal' ? <Sword className="w-5 h-5" /> : <Scroll className="w-5 h-5" />}
+                    </div>
+                    <p className="text-xs font-bold text-white mt-3 line-clamp-2 px-2 group-hover:text-witcher-gold transition-colors">{quest.name}</p>
+                    <p className="text-[9px] uppercase text-gray-400 mt-1">{quest.type}</p>
+                  </div>
+                  {i < analysis.recommendedSequence.length - 1 && (
+                    <div className={`w-16 h-1 mx-2 rounded-full ${isHighPriority ? 'bg-gradient-to-r from-red-500/50 to-witcher-gold/30' : 'bg-witcher-gold/20'}`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
     const filteredRecommendations = (analysis.recommendedSequence || [])
       .map(id => (analysis.recommendations || []).find(r => r.questId === id))
       .filter((rec): rec is NonNullable<typeof rec> => !!rec)
@@ -1714,6 +1882,8 @@ export default function App() {
           </div>
         </div>
 
+        {renderQuestInfographic()}
+
         {/* Header Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="parchment-card p-6 flex items-center gap-4">
@@ -1754,6 +1924,17 @@ export default function App() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Recommendations */}
           <div className="lg:col-span-2 space-y-8">
+            {analysis.orderJustification && (
+              <section className="parchment-card p-8 border-witcher-gold/30 bg-black/40">
+                <h2 className="text-2xl mb-4 flex items-center gap-3 text-witcher-gold">
+                  <Scroll className="w-6 h-6" /> Justificativa da Rota
+                </h2>
+                <p className="text-sm text-gray-300 leading-relaxed italic">
+                  {analysis.orderJustification}
+                </p>
+              </section>
+            )}
+
             {filteredRecommendations.length > 0 && (
               <section className="parchment-card p-8">
                 <h2 className="text-3xl mb-6 flex items-center gap-3">
@@ -2365,6 +2546,206 @@ export default function App() {
     );
   };
 
+  const renderFinderInput = () => (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-4xl mx-auto space-y-8"
+    >
+      <div className="text-center space-y-4">
+        <div className="flex justify-center">
+          <div className="p-4 rounded-full border-2 border-witcher-gold/30 bg-witcher-gold/10">
+            <MapIcon className="w-12 h-12 text-witcher-gold" />
+          </div>
+        </div>
+        <h1 className="text-5xl font-bold">Mestre Rastreador</h1>
+        <p className="text-witcher-gold/70 italic">"O que você procura? Ingredientes, armaduras, comida ou um monstro específico?"</p>
+      </div>
+
+      <div className="parchment-card p-8 space-y-8">
+        <section className="space-y-4">
+          <h2 className="text-2xl flex items-center gap-2">
+            <Search className="w-6 h-6" /> O que você está buscando?
+          </h2>
+          <input 
+            type="text"
+            value={finderQuery}
+            onChange={(e) => setFinderQuery(e.target.value)}
+            placeholder="Ex: Carne crua, Gaivota Branca, Melhor comida nível 10..."
+            className="w-full bg-black/50 border border-witcher-gold/30 rounded p-4 text-white focus:border-witcher-gold outline-none font-cinzel text-lg"
+          />
+        </section>
+
+        <section className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-witcher-gold/80 uppercase tracking-wider">Nível do Geralt</label>
+            <input 
+              type="number" 
+              min="1" max="100"
+              value={userData.level}
+              onChange={(e) => setUserData({...userData, level: parseInt(e.target.value) || 1})}
+              className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-witcher-gold/80 uppercase tracking-wider">Localização Atual</label>
+            <select 
+              value={userData.location}
+              onChange={(e) => setUserData({...userData, location: e.target.value})}
+              className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none"
+            >
+              <option value="">Desconhecida / Qualquer</option>
+              <option value="Pomar Branco">Pomar Branco</option>
+              <option value="Velen">Velen (Terra de Ninguém)</option>
+              <option value="Novigrad">Novigrad</option>
+              <option value="Skellige">Ilhas Skellige</option>
+              <option value="Kaer Morhen">Kaer Morhen</option>
+              <option value="Toussaint">Toussaint (Blood and Wine)</option>
+            </select>
+          </div>
+        </section>
+
+        <div className="pt-4 flex justify-center">
+          <button 
+            onClick={runFinderAnalysis}
+            disabled={!finderQuery.trim() || isLoading}
+            className="witcher-button flex items-center gap-3 px-12"
+          >
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+            Rastrear
+          </button>
+        </div>
+        {error && <p className="text-red-500 text-center text-sm">{error}</p>}
+      </div>
+    </motion.div>
+  );
+
+  const renderFinderDashboard = () => {
+    if (!finderAnalysis) return null;
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="max-w-7xl mx-auto space-y-8 pb-20"
+      >
+        <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-witcher-gold/20 pb-8">
+          <div className="space-y-2">
+            <h1 className="text-4xl font-cinzel text-witcher-gold">{finderAnalysis.itemName}</h1>
+            <p className="text-witcher-gold/60 italic">"{finderAnalysis.humor}"</p>
+          </div>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => {
+                const text = `
+                  WITCHER 3 QUEST MASTER - RASTREADOR
+                  Item: ${finderAnalysis.itemName}
+                  Melhor Local: ${(finderAnalysis.bestLocations || [])[0]?.name || 'Vários'}
+                `;
+                navigator.clipboard.writeText(text);
+                alert("Análise copiada!");
+              }}
+              className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5 text-sm flex items-center gap-2"
+            >
+              <Share2 className="w-4 h-4" /> Compartilhar
+            </button>
+            <button 
+              onClick={() => {
+                if (confirm("Deseja meditar e limpar esta busca?")) {
+                  setFinderAnalysis(null);
+                  setFinderQuery('');
+                  setCurrentStep('FINDER_INPUT');
+                }
+              }}
+              className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5 text-sm flex items-center gap-2"
+            >
+              <Wind className="w-4 h-4" /> Meditar (Reset)
+            </button>
+            <button onClick={() => setCurrentStep('FINDER_INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5 text-sm">Nova Busca</button>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            <section className="parchment-card p-8">
+              <h2 className="text-3xl mb-6 flex items-center gap-3">
+                <MapIcon className="w-8 h-8" /> Melhores Localizações
+              </h2>
+              <div className="space-y-4">
+                {(finderAnalysis.bestLocations || []).map((loc, i) => (
+                  <div key={i} className="p-4 bg-black/30 rounded border border-witcher-gold/10 hover:border-witcher-gold/40 transition-all">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="text-witcher-gold font-bold">{loc.name}</h4>
+                      <span className="text-[10px] px-2 py-0.5 bg-witcher-gold/20 text-witcher-gold rounded uppercase font-bold border border-witcher-gold/30">
+                        {loc.region}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-300">{loc.details}</p>
+                    {loc.dropRate && (
+                      <p className="text-xs text-blue-400 mt-2 flex items-center gap-1">
+                        <Info className="w-3 h-3" /> Chance/Disponibilidade: {loc.dropRate}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="parchment-card p-8">
+              <h2 className="text-3xl mb-6 flex items-center gap-3">
+                <Scroll className="w-8 h-8" /> Guia Passo a Passo
+              </h2>
+              <div className="space-y-6">
+                {(finderAnalysis.stepByStepGuide || []).map((step, i) => (
+                  <div key={i} className="p-4 bg-black/30 rounded border-l-4 border-witcher-gold relative">
+                    <div className="absolute -left-[10px] top-4 w-4 h-4 rounded-full bg-witcher-gold border-2 border-black" />
+                    <p className="text-sm text-gray-300 leading-relaxed ml-2">{step}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <div className="space-y-8">
+            <section className="parchment-card p-6">
+              <h2 className="text-2xl mb-4 flex items-center gap-2">
+                <Info className="w-6 h-6" /> Requisitos
+              </h2>
+              <p className="text-sm text-gray-300 leading-relaxed bg-witcher-gold/5 p-4 rounded border border-witcher-gold/10">
+                {finderAnalysis.requirements}
+              </p>
+            </section>
+
+            <section className="parchment-card p-6 border-blue-900/50">
+              <h2 className="text-2xl mb-4 flex items-center gap-2 text-blue-400">
+                <RefreshCw className="w-6 h-6" /> Alternativas Viáveis
+              </h2>
+              <div className="space-y-4">
+                {(finderAnalysis.alternatives || []).map((alt, i) => (
+                  <div key={i} className="p-3 bg-blue-900/10 border border-blue-500/20 rounded-lg">
+                    <p className="text-sm font-bold text-white mb-1">{alt.name}</p>
+                    <p className="text-xs text-gray-300 leading-relaxed">{alt.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="parchment-card p-6">
+              <h2 className="text-2xl mb-4 flex items-center gap-2">
+                <Zap className="w-6 h-6" /> Dicas de Farm / Economia
+              </h2>
+              <ul className="text-sm space-y-3 text-gray-400">
+                {(finderAnalysis.tips || []).map((tip, i) => (
+                  <li key={i} className="flex gap-2"><ChevronRight className="w-4 h-4 shrink-0 text-witcher-gold" /> {tip}</li>
+                ))}
+              </ul>
+            </section>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
   const renderGearInput = () => (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -2440,6 +2821,42 @@ export default function App() {
   const renderGearDashboard = () => {
     if (!gearAnalysis) return null;
 
+    const renderGearInfographic = () => {
+      const allItems = gearAnalysis.sets.flatMap(s => s.items.map(i => i.name.toLowerCase()));
+      const hasSwords = allItems.some(i => i.includes('espada') || i.includes('sword') || i.includes('aço') || i.includes('prata'));
+      const hasArmor = allItems.some(i => i.includes('armadura') || i.includes('armor') || i.includes('peitoral'));
+      const hasGauntlets = allItems.some(i => i.includes('manopla') || i.includes('luva') || i.includes('gauntlet'));
+      const hasPants = allItems.some(i => i.includes('calça') || i.includes('trousers') || i.includes('pant'));
+      const hasBoots = allItems.some(i => i.includes('bota') || i.includes('boot'));
+
+      const pieces = [
+        { name: 'Espadas', icon: <Sword className="w-6 h-6" />, active: hasSwords },
+        { name: 'Armadura', icon: <Shield className="w-6 h-6" />, active: hasArmor },
+        { name: 'Manoplas', icon: <Crosshair className="w-6 h-6" />, active: hasGauntlets },
+        { name: 'Calças', icon: <Activity className="w-6 h-6" />, active: hasPants },
+        { name: 'Botas', icon: <Wind className="w-6 h-6" />, active: hasBoots },
+      ];
+
+      return (
+        <div className="mb-8 parchment-card p-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[radial-gradient(circle_at_top_right,rgba(197,160,89,0.1)_0%,transparent_70%)] pointer-events-none" />
+          <h3 className="text-xl font-cinzel text-witcher-gold mb-6 flex items-center gap-2">
+            <Hammer className="w-5 h-5"/> Composição do Conjunto
+          </h3>
+          <div className="flex justify-around items-center flex-wrap gap-4">
+            {pieces.map((p, i) => (
+              <div key={i} className={`flex flex-col items-center gap-2 transition-all duration-500 ${p.active ? 'text-witcher-gold opacity-100 scale-110' : 'text-gray-600 opacity-40'}`}>
+                <div className={`p-4 rounded-full border-2 ${p.active ? 'border-witcher-gold bg-witcher-gold/10 shadow-[0_0_15px_rgba(197,160,89,0.3)]' : 'border-gray-700 bg-black/50'}`}>
+                  {p.icon}
+                </div>
+                <span className="text-xs font-bold uppercase tracking-wider">{p.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <motion.div 
         initial={{ opacity: 0 }}
@@ -2481,6 +2898,8 @@ export default function App() {
             <button onClick={() => setCurrentStep('GEAR_INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5 text-sm">Nova Análise</button>
           </div>
         </div>
+
+        {renderGearInfographic()}
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
@@ -2621,6 +3040,44 @@ export default function App() {
   const renderBestiaryDashboard = () => {
     if (!bestiaryAnalysis) return null;
 
+    const renderBestiaryInfographic = () => {
+      const types = [
+        { id: 'Óleo', icon: <Droplet className="w-6 h-6" />, color: 'text-green-400', bg: 'bg-green-900/20', border: 'border-green-500/30' },
+        { id: 'Sinal', icon: <Flame className="w-6 h-6" />, color: 'text-orange-400', bg: 'bg-orange-900/20', border: 'border-orange-500/30' },
+        { id: 'Bomba', icon: <Bomb className="w-6 h-6" />, color: 'text-red-400', bg: 'bg-red-900/20', border: 'border-red-500/30' },
+        { id: 'Poção', icon: <Activity className="w-6 h-6" />, color: 'text-purple-400', bg: 'bg-purple-900/20', border: 'border-purple-500/30' }
+      ];
+
+      return (
+        <div className="mb-8 parchment-card p-6">
+          <h3 className="text-xl font-cinzel text-witcher-gold mb-6 flex items-center gap-2">
+            <Crosshair className="w-5 h-5"/> Matriz de Vulnerabilidade
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {types.map(t => {
+              const weak = bestiaryAnalysis.weaknesses.filter(w => w.type.toLowerCase().includes(t.id.toLowerCase()) || w.name.toLowerCase().includes(t.id.toLowerCase()) || (t.id === 'Óleo' && w.name.toLowerCase().includes('oil')) || (t.id === 'Sinal' && w.name.toLowerCase().includes('sign')) || (t.id === 'Bomba' && w.name.toLowerCase().includes('bomb')) || (t.id === 'Poção' && w.name.toLowerCase().includes('potion')));
+              const isWeak = weak.length > 0;
+              return (
+                <div key={t.id} className={`p-4 rounded-lg border ${isWeak ? t.border + ' ' + t.bg : 'border-gray-800 bg-black/40 opacity-50'} flex flex-col items-center text-center transition-all duration-300`}>
+                  <div className={`p-3 rounded-full mb-2 ${isWeak ? t.color + ' bg-black/50 shadow-[0_0_15px_currentColor]' : 'text-gray-600'}`}>
+                    {t.icon}
+                  </div>
+                  <h4 className={`font-bold uppercase text-xs tracking-widest mb-1 ${isWeak ? 'text-white' : 'text-gray-500'}`}>{t.id}</h4>
+                  {isWeak ? (
+                    <div className="flex flex-col gap-1 mt-2">
+                      {weak.map((w, i) => <span key={i} className={`text-xs font-bold ${t.color}`}>{w.name}</span>)}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-gray-600 uppercase mt-2">Resistente / Neutro</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <motion.div 
         initial={{ opacity: 0 }}
@@ -2666,6 +3123,8 @@ export default function App() {
             <button onClick={() => setCurrentStep('BESTIARY_INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5 text-sm">Nova Análise</button>
           </div>
         </div>
+
+        {renderBestiaryInfographic()}
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
@@ -2996,6 +3455,19 @@ export default function App() {
             </button>
             <button 
               onClick={() => {
+                setAppMode('FINDER');
+                setCurrentStep('FINDER_INPUT');
+              }}
+              className={`flex items-center gap-2 px-6 py-3 rounded-full font-cinzel transition-all border-2 ${
+                appMode === 'FINDER' 
+                  ? 'bg-witcher-gold text-black border-witcher-gold shadow-[0_0_15px_rgba(197,160,89,0.4)]' 
+                  : 'bg-transparent text-witcher-gold border-witcher-gold/30 hover:border-witcher-gold/60'
+              }`}
+            >
+              <Search className="w-5 h-5" /> Mestre Rastreador
+            </button>
+            <button 
+              onClick={() => {
                 setAppMode('GEAR');
                 setCurrentStep('GEAR_INPUT');
               }}
@@ -3043,6 +3515,12 @@ export default function App() {
                 {currentStep === 'BESTIARY_INPUT' && renderBestiaryInput()}
                 {currentStep === 'BESTIARY_ANALYSIS' && <div className="h-64" />}
                 {currentStep === 'BESTIARY_DASHBOARD' && renderBestiaryDashboard()}
+              </>
+            ) : appMode === 'FINDER' ? (
+              <>
+                {currentStep === 'FINDER_INPUT' && renderFinderInput()}
+                {currentStep === 'FINDER_ANALYSIS' && <div className="h-64" />}
+                {currentStep === 'FINDER_DASHBOARD' && renderFinderDashboard()}
               </>
             ) : (
               <>
