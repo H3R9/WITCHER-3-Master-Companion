@@ -1,7 +1,6 @@
-<div align="center">
 ![witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh](https://github.com/user-attachments/assets/8a39ffdb-9d06-4b0e-bd6b-a6ace7715a6a)
 
-
+<div align="center">
 # Run and deploy your AI Studio app
 
 This contains everything you need to run your app locally.
