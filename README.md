@@ -1,10 +1,10 @@
 <div align="center">
 <img 
-  src="https://github.com/user-attachments/assets/7768989a-0496-4d3f-911e-1b5c2ab216d1"
+  src="https://github.com/user-attachments/assets/SEU_NOVO_LINK_AQUI"
   alt="Witcher 3 Master Companion Banner"
   title="Witcher 3 Master Companion Banner"
   width="100%"
-  style="border-radius: 10px; margin-bottom: 20px; transform: scaleX(-1);"
+  style="border-radius: 10px; margin-bottom: 20px; display: block;"
   loading="lazy"
 />
 
