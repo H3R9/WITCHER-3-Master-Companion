@@ -68,7 +68,7 @@ Precisa de um item específico e não sabe onde achar?
 </div>
 <br/>
 <div align="center">
-  <img src="https://placehold.co/600x350/1a1a1a/c5a059?text=Matriz+de+Vulnerabilidade" width="80%" alt="Bestiário - Matriz de Vulnerabilidade"/>
+  <img src="https://github.com/user-attachments/assets/55b26891-a8b3-444c-b2d0-337d3a038118" width="80%" alt="Bestiário - Matriz de Vulnerabilidade"/>
 </div>
 
 ---
