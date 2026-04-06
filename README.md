@@ -1,6 +1,9 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/H3R9/WITCHER-3-Master-Companion/main/src/witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh.jpg" alt="Witcher 3 Master Companion Banner" width="100%" style="border-radius: 10px; margin-bottom: 20px;"/>
 
+<img width="1919" height="1029" alt="Captura de tela 2026-04-06 160633" src="https://github.com/user-attachments/assets/eb66abac-0ab7-4b8a-be1b-3e33e2c3bd33" />
+
+
   <h1>🐺 Witcher 3 Master Companion</h1>
   <p><strong>O seu guia definitivo, alimentado por Inteligência Artificial, para dominar o Continente.</strong></p>
 
