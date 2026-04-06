@@ -65,7 +65,7 @@ Precisa de um item específico e não sabe onde achar?
 *(Substitua estas imagens por capturas de tela reais da sua aplicação)*
 
 <div align="center">
-  <img src="https://placehold.co/600x350/1a1a1a/c5a059?text=Menu+Principal" width="48%" alt="Menu Principal"/>
+  <img src="https://github.com/user-attachments/assets/a96a88ee-aeab-4026-b43b-84a0b28d73fc" width="48%" alt="Menu Principal"/>
   <img src="https://placehold.co/600x350/1a1a1a/c5a059?text=Dashboard+de+Missoes" width="48%" alt="Dashboard de Missões"/>
 </div>
 <br/>
