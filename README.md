@@ -1,6 +1,6 @@
 <div align="center">
 <img 
-  src="https://github.com/user-attachments/assets/SEU_NOVO_LINK_AQUI"
+  src="https://github.com/user-attachments/assets/f552dbc2-d490-4a50-8c36-dd754f3ea73d"
   alt="Witcher 3 Master Companion Banner"
   title="Witcher 3 Master Companion Banner"
   width="100%"
