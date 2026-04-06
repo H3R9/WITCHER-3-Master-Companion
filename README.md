@@ -1,5 +1,5 @@
-<div align="center">
-![witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh](https://github.com/user-attachments/assets/a02a113f-e96d-42ab-8d6e-f191385203e3)
+![witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh](https://github.com/user-attachments/assets/8a39ffdb-9d06-4b0e-bd6b-a6ace7715a6a)
+
 
 # Run and deploy your AI Studio app
 
