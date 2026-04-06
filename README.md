@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="src/witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh.jpg" alt="Witcher 3 Master Companion Banner" width="100%" style="border-radius: 10px; margin-bottom: 20px;"/>
+  <img src="https://raw.githubusercontent.com/H3R9/WITCHER-3-Master-Companion/main/src/witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh.jpg" alt="Witcher 3 Master Companion Banner" width="100%" style="border-radius: 10px; margin-bottom: 20px;"/>
 
   <h1>🐺 Witcher 3 Master Companion</h1>
   <p><strong>O seu guia definitivo, alimentado por Inteligência Artificial, para dominar o Continente.</strong></p>
@@ -91,8 +91,8 @@ Precisa de um item específico e não sabe onde achar?
 
 1. Clone o repositório:
    ```bash
-   git clone https://github.com/seu-usuario/witcher-3-master-companion.git
-   cd witcher-3-master-companion
+   git clone https://github.com/H3R9/WITCHER-3-Master-Companion.git
+   cd WITCHER-3-Master-Companion
    ```
 
 2. Instale as dependências:
