@@ -3,8 +3,6 @@
        alt="Witcher 3 Master Companion Banner" 
        width="100%" 
        style="border-radius: 10px; margin-bottom: 20px; transform: scaleX(-1);"/>
-</div>
-
 
   <h1>🐺 Witcher 3 Master Companion</h1>
   <p><strong>O seu guia definitivo, alimentado por Inteligência Artificial, para dominar o Continente.</strong></p>
