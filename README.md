@@ -1,8 +1,12 @@
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/7768989a-0496-4d3f-911e-1b5c2ab216d1" 
-       alt="Witcher 3 Master Companion Banner" 
-       width="100%" 
-       style="border-radius: 10px; margin-bottom: 20px; transform: scaleX(-1);"/>
+<img 
+  src="https://github.com/user-attachments/assets/7768989a-0496-4d3f-911e-1b5c2ab216d1"
+  alt="Witcher 3 Master Companion Banner"
+  title="Witcher 3 Master Companion Banner"
+  width="100%"
+  style="border-radius: 10px; margin-bottom: 20px; transform: scaleX(-1);"
+  loading="lazy"
+/>
 
   <h1>🐺 Witcher 3 Master Companion</h1>
   <p><strong>O seu guia definitivo, alimentado por Inteligência Artificial, para dominar o Continente.</strong></p>
