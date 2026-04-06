@@ -20,9 +20,9 @@
 </div>
 
 <br/>
-
+<div align="center">
 O **Witcher 3 Master Companion** é uma aplicação web interativa projetada para auxiliar jogadores de *The Witcher 3: Wild Hunt (Next-Gen Edition)*. Utilizando a poderosa API do Google Gemini, o app analisa capturas de tela do seu jogo (inventário, missões, bestiário, cartas de Gwent) e fornece estratégias personalizadas, rotas otimizadas e dicas valiosas baseadas no seu nível e localização atual.
-
+</div>
 ---
 
 ## ✨ Funcionalidades Principais
