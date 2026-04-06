@@ -62,8 +62,6 @@ Precisa de um item específico e não sabe onde achar?
 
 ## 📸 Capturas de Tela
 
-*(Substitua estas imagens por capturas de tela reais da sua aplicação)*
-
 <div align="center">
   <img src="https://github.com/user-attachments/assets/a96a88ee-aeab-4026-b43b-84a0b28d73fc" width="48%" alt="Menu Principal"/>
   <img src="https://github.com/user-attachments/assets/703a34f5-5dd8-4a9a-bcf0-af254d90c668" width="48%" alt="Dashboard de Missões"/>
