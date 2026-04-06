@@ -31,7 +31,8 @@ import {
   Flame,
   Bomb,
   Activity,
-  Crosshair
+  Crosshair,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
@@ -168,6 +169,7 @@ interface Quest {
   type: 'Principal' | 'Secundária' | 'Contrato' | 'Caça ao Tesouro';
   status: 'Ativa' | 'Concluída' | 'Falhou';
   level: string;
+  location?: string;
   notes: string;
 }
 
@@ -528,8 +530,9 @@ export default function App() {
         1. Extraia o nome EXATO da missão. Se o nome estiver ilegível, use o contexto dos objetivos para deduzir o nome real da missão no jogo. NUNCA retorne "Missão Desconhecida".
         2. Identifique o tipo: Principal, Secundária, Contrato ou Caça ao Tesouro.
         3. Identifique o status: Ativa, Concluída ou Falhou.
-        4. Extraia o nível recomendado se estiver visível.
-        5. Extraia o objetivo atual ou notas relevantes com o máximo de detalhe possível.
+        4. Extraia o nível recomendado se estiver visível. Se o nível for "Várias localizações", deixe o nível vazio e coloque isso na localização.
+        5. Extraia a localização/região da missão se for possível deduzir pelo nome ou contexto (ex: Velen, Novigrad, Skellige, Pomar Branco, Toussaint).
+        6. Extraia o objetivo atual ou notas relevantes com o máximo de detalhe possível.
 
         Retorne um array JSON de objetos.
         
@@ -550,6 +553,7 @@ export default function App() {
                 type: { type: Type.STRING, enum: ["Principal", "Secundária", "Contrato", "Caça ao Tesouro"] },
                 status: { type: Type.STRING, enum: ["Ativa", "Concluída", "Falhou"] },
                 level: { type: Type.STRING },
+                location: { type: Type.STRING },
                 notes: { type: Type.STRING }
               },
               required: ["name", "type", "status", "level", "notes"]
@@ -1648,6 +1652,7 @@ export default function App() {
                 <th className="p-4">Tipo</th>
                 <th className="p-4">Status</th>
                 <th className="p-4">Nível</th>
+                <th className="p-4">Localização</th>
                 <th className="p-4">Objetivo/Notas</th>
                 <th className="p-4">Ações</th>
               </tr>
@@ -1710,6 +1715,18 @@ export default function App() {
                   </td>
                   <td className="p-4">
                     <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-32"
+                      value={quest.location || ''}
+                      placeholder="Ex: Velen"
+                      onChange={e => {
+                        const newQuests = [...quests];
+                        newQuests[idx].location = e.target.value;
+                        setQuests(newQuests);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <input 
                       className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
                       value={quest.notes}
                       onChange={e => {
@@ -1735,7 +1752,7 @@ export default function App() {
 
         <div className="mt-6 flex justify-between items-center">
           <button 
-            onClick={() => setQuests([...quests, { id: `q-${Date.now()}`, name: '', type: 'Secundária', status: 'Ativa', level: '', notes: '' }])}
+            onClick={() => setQuests([...quests, { id: `q-${Date.now()}`, name: '', type: 'Secundária', status: 'Ativa', level: '', location: '', notes: '' }])}
             className="flex items-center gap-2 text-witcher-gold hover:text-white transition-colors text-sm"
           >
             <Plus className="w-4 h-4" /> Adicionar Missão Manualmente
@@ -1848,6 +1865,250 @@ export default function App() {
               />
             </div>
             <div className="flex gap-2">
+              <button 
+                onClick={() => {
+                  const htmlContent = `
+                    <!DOCTYPE html>
+                    <html lang="pt-BR">
+                    <head>
+                      <meta charset="UTF-8">
+                      <title>Witcher 3 Quest Master - Caminho do Destino</title>
+                      <link rel="preconnect" href="https://fonts.googleapis.com">
+                      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                      <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+                      <style>
+                        :root {
+                          --witcher-gold: #c5a059;
+                          --witcher-gold-dim: rgba(197, 160, 89, 0.3);
+                          --witcher-gold-dimmer: rgba(197, 160, 89, 0.1);
+                          --bg-dark: #0a0a0a;
+                          --bg-card: #141414;
+                          --text-main: #e5e7eb;
+                          --text-muted: #9ca3af;
+                        }
+                        body { 
+                          background-color: var(--bg-dark); 
+                          color: var(--text-main); 
+                          font-family: 'Inter', sans-serif; 
+                          padding: 3rem 2rem; 
+                          max-width: 1200px;
+                          margin: 0 auto;
+                          line-height: 1.6;
+                        }
+                        h1, h2, h3, .cinzel { font-family: 'Cinzel', serif; }
+                        .header {
+                          border-bottom: 1px solid var(--witcher-gold-dim);
+                          padding-bottom: 2rem;
+                          margin-bottom: 2rem;
+                        }
+                        .header h1 {
+                          font-size: 2.5rem;
+                          color: #fff;
+                          margin: 0 0 0.5rem 0;
+                          font-weight: 400;
+                        }
+                        .header .humor {
+                          color: var(--witcher-gold);
+                          opacity: 0.8;
+                          font-style: italic;
+                          margin: 0;
+                        }
+                        .parchment-card {
+                          background: linear-gradient(to bottom right, #1a1a1a, #0f0f0f);
+                          border: 1px solid var(--witcher-gold-dim);
+                          border-radius: 0.5rem;
+                          padding: 2rem;
+                          margin-bottom: 2rem;
+                          box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 0 20px rgba(197,160,89,0.05);
+                        }
+                        .section-title {
+                          font-size: 1.8rem;
+                          color: var(--witcher-gold);
+                          margin-top: 0;
+                          margin-bottom: 1.5rem;
+                          display: flex;
+                          align-items: center;
+                          gap: 0.75rem;
+                          font-weight: 400;
+                        }
+                        .justification {
+                          color: #d1d5db;
+                          font-style: italic;
+                          font-size: 0.95rem;
+                        }
+                        .timeline {
+                          position: relative;
+                          padding-left: 3rem;
+                        }
+                        .timeline-item {
+                          position: relative;
+                          margin-bottom: 2rem;
+                        }
+                        .timeline-item:last-child {
+                          margin-bottom: 0;
+                        }
+                        .step-number {
+                          position: absolute;
+                          left: -3rem;
+                          top: 0;
+                          width: 2rem;
+                          height: 2rem;
+                          border-radius: 50%;
+                          background-color: var(--witcher-gold-dimmer);
+                          border: 1px solid var(--witcher-gold-dim);
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          font-family: 'Cinzel', serif;
+                          color: var(--witcher-gold);
+                          font-size: 0.875rem;
+                          z-index: 10;
+                        }
+                        .timeline-line {
+                          position: absolute;
+                          left: -2rem;
+                          top: 2rem;
+                          bottom: -2rem;
+                          width: 1px;
+                          background-color: var(--witcher-gold-dim);
+                        }
+                        .timeline-item:last-child .timeline-line {
+                          display: none;
+                        }
+                        .quest-card {
+                          background-color: rgba(0,0,0,0.4);
+                          border: 1px solid var(--witcher-gold-dim);
+                          border-radius: 0.5rem;
+                          padding: 1.5rem;
+                        }
+                        .quest-header {
+                          display: flex;
+                          justify-content: space-between;
+                          align-items: flex-start;
+                          margin-bottom: 1rem;
+                        }
+                        .quest-title-wrapper {
+                          display: flex;
+                          align-items: center;
+                          gap: 0.75rem;
+                        }
+                        .priority-dot {
+                          width: 0.5rem;
+                          height: 0.5rem;
+                          border-radius: 50%;
+                        }
+                        .priority-Alta .priority-dot { background-color: #ef4444; box-shadow: 0 0 8px rgba(239,68,68,0.8); }
+                        .priority-Média .priority-dot { background-color: #eab308; box-shadow: 0 0 8px rgba(234,179,8,0.8); }
+                        .priority-Baixa .priority-dot { background-color: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.8); }
+                        
+                        .quest-title {
+                          font-size: 1.25rem;
+                          color: #fff;
+                          margin: 0;
+                          font-weight: 400;
+                        }
+                        .priority-badge {
+                          padding: 0.25rem 0.75rem;
+                          border-radius: 0.25rem;
+                          font-size: 0.625rem;
+                          text-transform: uppercase;
+                          font-weight: 700;
+                          letter-spacing: 0.1em;
+                        }
+                        .priority-Alta .priority-badge { background-color: rgba(127,29,29,0.4); color: #fecaca; border: 1px solid rgba(239,68,68,0.3); }
+                        .priority-Média .priority-badge { background-color: rgba(113,63,18,0.4); color: #fef08a; border: 1px solid rgba(234,179,8,0.3); }
+                        .priority-Baixa .priority-badge { background-color: rgba(30,58,138,0.4); color: #bfdbfe; border: 1px solid rgba(59,130,246,0.3); }
+                        
+                        .quest-meta {
+                          display: flex;
+                          gap: 1rem;
+                          font-size: 0.75rem;
+                          color: rgba(197, 160, 89, 0.6);
+                          text-transform: uppercase;
+                          letter-spacing: 0.05em;
+                          margin-bottom: 1rem;
+                        }
+                        .quest-details p {
+                          font-size: 0.875rem;
+                          color: #d1d5db;
+                          margin: 0 0 0.75rem 0;
+                        }
+                        .quest-details p:last-child {
+                          margin-bottom: 0;
+                        }
+                        .quest-details strong {
+                          color: var(--witcher-gold);
+                          font-weight: 600;
+                        }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="header">
+                        <h1>Painel do Caçador</h1>
+                        <p class="humor">"${analysis.humor}"</p>
+                      </div>
+                      
+                      ${analysis.orderJustification ? `
+                      <div class="parchment-card">
+                        <h2 class="section-title">Justificativa da Rota</h2>
+                        <p class="justification">${analysis.orderJustification}</p>
+                      </div>
+                      ` : ''}
+                      
+                      <div class="parchment-card">
+                        <h2 class="section-title">Trilha do Destino (Ordem Exata)</h2>
+                        <div class="timeline">
+                          ${(analysis.recommendedSequence || []).map((questId, i) => {
+                            const rec = (analysis.recommendations || []).find(r => r.questId === questId);
+                            const quest = quests.find(q => q.id === questId);
+                            if (!rec || !quest) return '';
+                            
+                            return `
+                              <div class="timeline-item priority-${rec.priority}">
+                                <div class="step-number">${i + 1}</div>
+                                <div class="timeline-line"></div>
+                                <div class="quest-card">
+                                  <div class="quest-header">
+                                    <div class="quest-title-wrapper">
+                                      <div class="priority-dot"></div>
+                                      <h3 class="quest-title cinzel">${quest.name || 'Missão Sem Nome'}</h3>
+                                    </div>
+                                    <span class="priority-badge">Prioridade ${rec.priority}</span>
+                                  </div>
+                                  <div class="quest-meta">
+                                    <span>${quest.type || 'N/A'}</span>
+                                    <span>•</span>
+                                    <span>Nível ${quest.level || '?'}</span>
+                                    ${quest.location ? `<span>•</span><span>${quest.location}</span>` : ''}
+                                  </div>
+                                  <div class="quest-details">
+                                    <p><strong>Motivo:</strong> ${rec.reason}</p>
+                                    <p><strong>Próximos Passos:</strong> ${rec.nextSteps}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+                    </body>
+                    </html>
+                  `;
+                  const blob = new Blob([htmlContent], { type: 'text/html' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'witcher3_caminho_do_destino.html';
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                className="px-4 py-2 border border-witcher-gold/30 rounded hover:bg-white/5 text-sm flex items-center gap-2"
+                title="Salvar Caminho do Destino (HTML)"
+              >
+                <Download className="w-4 h-4" />
+              </button>
               <button 
                 onClick={() => {
                   const text = `
