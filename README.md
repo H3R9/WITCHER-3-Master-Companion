@@ -1,153 +1,44 @@
-<div align="center">
-<img 
-  src="https://github.com/user-attachments/assets/f552dbc2-d490-4a50-8c36-dd754f3ea73d"
-  alt="Witcher 3 Master Companion Banner"
-  title="Witcher 3 Master Companion Banner"
-  width="100%"
-  style="border-radius: 10px; margin-bottom: 20px; display: block;"
-  loading="lazy"
-/>
+# 🐺 Witcher 3 Quest Master - Next-Gen
 
-  <h1>🐺 Witcher 3 Master Companion</h1>
-  <p><strong>O seu guia definitivo, alimentado por Inteligência Artificial, para dominar o Continente.</strong></p>
+Um companheiro avançado e inteligente para **The Witcher 3: Wild Hunt**, alimentado por Inteligência Artificial para ajudar você a tomar as melhores decisões no Continente.
 
-  <p>
-    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
-    <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-    <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind" />
-    <img src="https://img.shields.io/badge/Google_Gemini-8E75B2?style=for-the-badge&logo=google&logoColor=white" alt="Gemini AI" />
-  </p>
-</div>
+## ✨ Funcionalidades
 
-<br/>
+*   **👤 Perfil do Bruxo (Cloud Sync):** Salve seu progresso na nuvem de forma segura com Firebase e Google Login. Mantenha seu Nível, Coroas, Localização Atual e Regiões Desbloqueadas sempre sincronizados.
+*   **📜 Mestre de Missões:** Envie prints do seu diário de missões. A IA lê as missões usando OCR avançado, sugere a melhor ordem de resolução e avisa sobre consequências (com controle de tolerância a spoilers!).
+*   **💰 Mestre Mercador:** Tire foto do seu inventário e descubra o que vender, o que guardar e para qual mercador específico vender para obter o maior lucro.
+*   **⚔️ Mestre Armeiro:** Analise seus equipamentos e diagramas. Receba recomendações do que craftar com base no seu nível atual e dinheiro disponível.
+*   **🃏 Estrategista de Gwent:** Escaneie suas cartas e receba dicas de montagem de deck e estratégias para derrotar qualquer oponente.
+*   **💀 Mestre do Bestiário:** Encontrou um monstro desconhecido? Envie uma print e descubra suas fraquezas, poções recomendadas e táticas de combate.
+*   **🔍 Mestre Rastreador:** Busque por qualquer item, material ou armadura. A IA criará um guia passo a passo de como obtê-lo, respeitando as regiões que você já desbloqueou.
 
-O **Witcher 3 Master Companion** é uma aplicação web interativa projetada para auxiliar jogadores de *The Witcher 3: Wild Hunt (Next-Gen Edition)*. Utilizando a poderosa API do Google Gemini, o app analisa capturas de tela do seu jogo (inventário, missões, bestiário, cartas de Gwent) e fornece estratégias personalizadas, rotas otimizadas e dicas valiosas baseadas no seu nível e localização atual.
+## 🚀 Tecnologias Utilizadas
 
----
+*   **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Motion (Animações), Lucide React (Ícones).
+*   **Inteligência Artificial:** Google Gemini API (`gemini-3.1-pro-preview`) com *Google Search Grounding* para OCR de alta precisão, leitura de imagens borradas e conhecimento profundo e atualizado do jogo.
+*   **Backend & Banco de Dados:** Firebase Authentication (Google Login) e Firebase Firestore (com Regras de Segurança rigorosas para proteção de dados).
 
-## ✨ Funcionalidades Principais
+## 🛠️ Como Executar Localmente
 
-### 📜 Mestre de Missões (Quest Master)
-Envie prints do seu log de missões e a IA criará o **Caminho do Destino**, uma linha do tempo visual com a ordem exata das missões que você deve fazer.
-- Evita que você perca missões secundárias importantes.
-- Prioriza missões baseadas no seu nível para maximizar o ganho de XP.
-- **Exportação HTML:** Salve seu Caminho do Destino em um arquivo HTML estilizado para consultar offline.
-
-### 💰 Mestre Mercador (Merchant Master)
-Não sabe o que vender, desmontar ou guardar?
-- Analisa seu inventário e diz exatamente para qual mercador vender cada item para obter o maior lucro.
-- Avisa se você deve guardar um item para um mercador melhor em outra região (ex: Novigrad ou Toussaint).
-
-### 🃏 Estrategista de Gwent (Gwent Strategist)
-Torne-se o campeão do Continente.
-- Analisa suas cartas disponíveis e monta o melhor baralho possível.
-- Sugere a melhor carta de Líder e fornece estratégias detalhadas rodada a rodada.
-
-### 💀 Mestre do Bestiário (Bestiary Master)
-Conheça seu inimigo antes de sacar a espada de prata.
-- Gera uma **Matriz de Vulnerabilidade** visual mostrando exatamente quais Óleos, Sinais, Bombas e Poções usar.
-- Fornece dicas de combate, lore e lista de possíveis *loots* (saques).
-
-### ⚔️ Mestre Armeiro (Gear Master)
-Otimize seu equipamento de Bruxo.
-- Analisa diagramas e peças de armadura das Escolas (Lobo, Gato, Grifo, Urso, etc.).
-- Mostra um infográfico da composição do seu set e sugere a melhor *build* (Sinais, Ataque Rápido, Alquimia) para ele.
-
-### 🔍 Mestre Rastreador (Finder Master)
-Precisa de um item específico e não sabe onde achar?
-- Digite o nome do item, seu nível e localização.
-- A IA fornecerá um guia passo a passo, locais exatos de *farm* e alternativas viáveis caso o item seja de nível muito alto.
-
----
-
-## 📸 Capturas de Tela
-
-<div align="center">
-  <img src="https://github.com/user-attachments/assets/a96a88ee-aeab-4026-b43b-84a0b28d73fc" width="48%" alt="Menu Principal"/>
-  <img src="https://github.com/user-attachments/assets/703a34f5-5dd8-4a9a-bcf0-af254d90c668" width="48%" alt="Dashboard de Missões"/>
-</div>
-<br/>
-<div align="center">
-  <img src="https://github.com/user-attachments/assets/55b26891-a8b3-444c-b2d0-337d3a038118" width="80%" alt="Bestiário - Matriz de Vulnerabilidade"/>
-</div>
-
----
-
-## 🛠️ Tecnologias Utilizadas
-
-- **Frontend:** React 18, TypeScript, Vite
-- **Estilização:** Tailwind CSS
-- **Animações:** Framer Motion (`motion/react`)
-- **Ícones:** Lucide React
-- **Inteligência Artificial:** Google Gemini API (`@google/genai`) - Modelos *Gemini 3.1 Pro Preview* e *Gemini 3.1 Flash Preview* (para OCR).
-
----
-
-## 🚀 Como Executar o Projeto
-
-### Pré-requisitos
-
-- Node.js (v18 ou superior)
-- NPM ou Yarn
-- Uma chave de API do Google Gemini ([Obtenha aqui](https://aistudio.google.com/))
-
-### Instalação
-
-1. Clone o repositório:
-   ```bash
-   git clone https://github.com/H3R9/WITCHER-3-Master-Companion.git
-   cd WITCHER-3-Master-Companion
-   ```
-
+1. Clone o repositório.
 2. Instale as dependências:
    ```bash
    npm install
    ```
-
-3. Configure as Variáveis de Ambiente:
-   Crie um arquivo `.env` na raiz do projeto e adicione sua chave de API do Gemini:
-   ```env
-   GEMINI_API_KEY=sua_chave_de_api_aqui
-   ```
-   *(Nota: Se estiver rodando no Google AI Studio, a chave já é injetada automaticamente no ambiente).*
-
+3. Configure as variáveis de ambiente. Você precisará de uma chave da API do Gemini e das configurações do Firebase:
+   * Crie um arquivo `.env` na raiz do projeto:
+     ```env
+     GEMINI_API_KEY=sua_chave_aqui
+     ```
+   * Configure o Firebase no arquivo `firebase-applet-config.json`.
 4. Inicie o servidor de desenvolvimento:
    ```bash
    npm run dev
    ```
 
-5. Abra o navegador em `http://localhost:3000` (ou a porta indicada no terminal).
+## 🛡️ Segurança e Privacidade
+
+Seus dados de perfil são protegidos por **Firestore Security Rules**. Apenas você, autenticado via Google, tem acesso de leitura e escrita ao seu próprio documento de progresso. O sistema valida rigorosamente os dados para evitar corrompimento do seu save na nuvem.
 
 ---
-
-## 🎨 Design e UI/UX
-
-A interface foi construída para ser altamente imersiva, utilizando:
-- **Tipografia:** `Cinzel` para títulos (trazendo o ar épico e medieval) e `Inter` para legibilidade.
-- **Paleta de Cores:** Focada em tons escuros (Dark Mode nativo) com destaques em "Witcher Gold" (`#c5a059`) e vermelho sangue para alertas.
-- **Efeitos:** Partículas de brasas flutuantes, neblina animada, vinhetas e texturas de pergaminho para os painéis de leitura.
-
----
-
-## 🤝 Como Contribuir
-
-Contribuições são sempre bem-vindas! Se você tem ideias para novas funcionalidades, correções de bugs ou melhorias na IA:
-
-1. Faça um *Fork* do projeto.
-2. Crie uma *Branch* para sua feature (`git checkout -b feature/NovaFuncionalidade`).
-3. Faça o *Commit* de suas mudanças (`git commit -m 'Adicionando nova funcionalidade incrível'`).
-4. Faça o *Push* para a Branch (`git push origin feature/NovaFuncionalidade`).
-5. Abra um **Pull Request**.
-
----
-
-## 📜 Licença
-
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
----
-
-<div align="center">
-  <p><i>"O destino é uma espada de dois gumes... e eu sou um dos gumes."</i></p>
-  <p>Desenvolvido com ⚔️ e magia.</p>
-</div>
+*Boa caçada no Caminho!* ⚔️
