@@ -32,16 +32,28 @@ import {
   Bomb,
   Activity,
   Crosshair,
-  Download
+  Download,
+  User,
+  Coins,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import { auth, db, loginWithGoogle, logout, handleFirestoreError, OperationType } from './firebase';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import backgroundImage from './witcher-3-4k-hanged-man-s-tree-3klyvhf64cpx4qmh.jpg';
 
 // --- Types ---
 
-type Step = 'MAIN_MENU' | 'INPUT' | 'OCR' | 'CONFIRM' | 'ANALYSIS' | 'DASHBOARD' | 'MERCHANT_INPUT' | 'MERCHANT_ANALYSIS' | 'MERCHANT_DASHBOARD' | 'GWENT_INPUT' | 'GWENT_ANALYSIS' | 'GWENT_DASHBOARD' | 'BESTIARY_INPUT' | 'BESTIARY_ANALYSIS' | 'BESTIARY_DASHBOARD' | 'GEAR_INPUT' | 'GEAR_ANALYSIS' | 'GEAR_DASHBOARD' | 'FINDER_INPUT' | 'FINDER_ANALYSIS' | 'FINDER_DASHBOARD';
-type AppMode = 'QUESTS' | 'MERCHANT' | 'GWENT' | 'BESTIARY' | 'GEAR' | 'FINDER';
+type Step = 'MAIN_MENU' | 'INPUT' | 'OCR' | 'CONFIRM' | 'ANALYSIS' | 'DASHBOARD' | 
+  'MERCHANT_INPUT' | 'MERCHANT_OCR' | 'MERCHANT_CONFIRM' | 'MERCHANT_ANALYSIS' | 'MERCHANT_DASHBOARD' | 
+  'GWENT_INPUT' | 'GWENT_OCR' | 'GWENT_CONFIRM' | 'GWENT_ANALYSIS' | 'GWENT_DASHBOARD' | 
+  'BESTIARY_INPUT' | 'BESTIARY_OCR' | 'BESTIARY_CONFIRM' | 'BESTIARY_ANALYSIS' | 'BESTIARY_DASHBOARD' | 
+  'GEAR_INPUT' | 'GEAR_OCR' | 'GEAR_CONFIRM' | 'GEAR_ANALYSIS' | 'GEAR_DASHBOARD' | 
+  'FINDER_INPUT' | 'FINDER_ANALYSIS' | 'FINDER_DASHBOARD' | 'PROFILE_DASHBOARD';
+type AppMode = 'QUESTS' | 'MERCHANT' | 'GWENT' | 'BESTIARY' | 'GEAR' | 'FINDER' | 'PROFILE';
 
 interface FinderAnalysisResult {
   itemName: string;
@@ -173,10 +185,32 @@ interface Quest {
   notes: string;
 }
 
+interface ExtractedMerchantItem {
+  id: string;
+  name: string;
+  quantity: string;
+  type: string;
+}
+
+interface ExtractedGwentCard {
+  id: string;
+  name: string;
+  type: string;
+  power: string;
+}
+
+interface ExtractedGearItem {
+  id: string;
+  name: string;
+  type: string;
+  category?: string;
+}
+
 interface UserData {
-  images: string[];
   level: number;
   location: string;
+  accessibleLocations: string[];
+  money: number;
   spoilerTolerance: 'None' | 'Minor' | 'Full';
   toggles: {
     main: boolean;
@@ -405,30 +439,83 @@ export default function App() {
     const saved = localStorage.getItem('witcher_current_step');
     return (saved as Step) || 'MAIN_MENU';
   });
+  
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [images, setImages] = useState<string[]>([]);
+  
   const [userData, setUserData] = useState<UserData>({
-    images: [],
     level: 1,
-    location: '',
+    location: 'Pomar Branco',
+    accessibleLocations: ['Pomar Branco'],
+    money: 0,
     spoilerTolerance: 'None',
     toggles: { main: true, secondary: true, contracts: true }
   });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const userRef = doc(db, 'users', user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as UserData;
+        setUserData(data);
+      } else {
+        // Create initial profile
+        setDoc(userRef, {
+          ...userData,
+          uid: user.uid,
+          updatedAt: serverTimestamp()
+        }).catch(err => handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`));
+      }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const updateUserData = async (newData: Partial<UserData>) => {
+    const updated = { ...userData, ...newData };
+    setUserData(updated);
+    if (user) {
+      try {
+        await setDoc(doc(db, 'users', user.uid), {
+          ...updated,
+          uid: user.uid,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+      }
+    }
+  };
   const [merchantImages, setMerchantImages] = useState<string[]>([]);
   const [merchantLocation, setMerchantLocation] = useState<string>('Pomar Branco');
+  const [merchantItems, setMerchantItems] = useState<ExtractedMerchantItem[]>([]);
   const [merchantAnalysis, setMerchantAnalysis] = useState<MerchantAnalysisResult | null>(() => {
     const saved = localStorage.getItem('witcher_merchant_analysis');
     return saved ? JSON.parse(saved) : null;
   });
   const [gwentImages, setGwentImages] = useState<string[]>([]);
+  const [gwentCards, setGwentCards] = useState<ExtractedGwentCard[]>([]);
   const [gwentAnalysis, setGwentAnalysis] = useState<GwentAnalysisResult | null>(() => {
     const saved = localStorage.getItem('witcher_gwent_analysis');
     return saved ? JSON.parse(saved) : null;
   });
   const [bestiaryImages, setBestiaryImages] = useState<string[]>([]);
+  const [bestiaryTarget, setBestiaryTarget] = useState<string>('');
   const [bestiaryAnalysis, setBestiaryAnalysis] = useState<BestiaryAnalysisResult | null>(() => {
     const saved = localStorage.getItem('witcher_bestiary_analysis');
     return saved ? JSON.parse(saved) : null;
   });
   const [gearImages, setGearImages] = useState<string[]>([]);
+  const [gearItems, setGearItems] = useState<ExtractedGearItem[]>([]);
   const [gearAnalysis, setGearAnalysis] = useState<GearAnalysisResult | null>(() => {
     const saved = localStorage.getItem('witcher_gear_analysis');
     return saved ? JSON.parse(saved) : null;
@@ -488,24 +575,18 @@ export default function App() {
     Array.from(files).forEach((file: File) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setUserData(prev => ({
-          ...prev,
-          images: [...prev.images, reader.result as string]
-        }));
+        setImages(prev => [...prev, reader.result as string]);
       };
       reader.readAsDataURL(file);
     });
   };
 
   const removeImage = (index: number) => {
-    setUserData(prev => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index)
-    }));
+    setImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const runOCR = async () => {
-    if (userData.images.length === 0) {
+    if (images.length === 0) {
       setError("Por favor, envie pelo menos uma imagem.");
       return;
     }
@@ -515,7 +596,7 @@ export default function App() {
     setCurrentStep('OCR');
 
     try {
-      const parts = userData.images.map(img => ({
+      const parts = images.map(img => ({
         inlineData: {
           mimeType: "image/jpeg",
           data: img.split(',')[1]
@@ -525,6 +606,12 @@ export default function App() {
       const prompt = `
         Você é um especialista em The Witcher 3 Next-Gen (v4.0+).
         Analise estas capturas de tela do log de missões e extraia todas as missões visíveis.
+        
+        ATENÇÃO - OTIMIZAÇÃO DE OCR PARA BAIXA QUALIDADE:
+        - As imagens podem estar borradas, com artefatos de compressão ou muitos elementos visuais sobrepostos.
+        - Use o CONTEXTO (ícones, formato do texto, objetivos) para deduzir palavras ilegíveis.
+        - Se uma letra estiver confusa (ex: 'l' vs 'I', 'O' vs '0'), use o bom senso do vocabulário do jogo.
+        - Ignore elementos da UI que não sejam missões (ex: botões de controle, dicas de tutorial).
         
         REGRAS:
         1. Extraia o nome EXATO da missão. Se o nome estiver ilegível, use o contexto dos objetivos para deduzir o nome real da missão no jogo. NUNCA retorne "Missão Desconhecida".
@@ -540,9 +627,10 @@ export default function App() {
       `;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", 
+        model: "gemini-3.1-pro-preview", 
         contents: { parts: [...parts, { text: prompt }] },
         config: { 
+          tools: [{ googleSearch: {} }],
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
@@ -766,7 +854,7 @@ export default function App() {
     }
   };
 
-  const runMerchantAnalysis = async () => {
+  const extractMerchantItems = async () => {
     if (merchantImages.length === 0) {
       setError("Por favor, envie pelo menos uma imagem do seu inventário.");
       return;
@@ -774,7 +862,7 @@ export default function App() {
 
     setIsLoading(true);
     setError(null);
-    setCurrentStep('MERCHANT_ANALYSIS');
+    setCurrentStep('MERCHANT_OCR');
 
     try {
       const parts = merchantImages.map(img => ({
@@ -785,20 +873,83 @@ export default function App() {
       }));
 
       const prompt = `
+        Você é um especialista em The Witcher 3 Next-Gen (v4.0+).
+        Analise estas capturas de tela do inventário de Geralt e extraia todos os itens visíveis.
+        
+        ATENÇÃO - OTIMIZAÇÃO DE OCR PARA BAIXA QUALIDADE:
+        - As imagens podem estar borradas ou com muitos elementos visuais.
+        - Use o CONTEXTO (ícones, formato do texto) para deduzir palavras ilegíveis.
+        - Identifique a quantidade do item se estiver visível.
+        - Classifique o tipo do item (Arma, Armadura, Alquimia, Ingrediente, Lixo, etc).
+
+        Retorne um array JSON de objetos.
+        Idioma: Português Brasileiro.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview", 
+        contents: { parts: [...parts, { text: prompt }] },
+        config: { 
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                quantity: { type: Type.STRING },
+                type: { type: Type.STRING }
+              },
+              required: ["name"]
+            }
+          }
+        }
+      });
+
+      const extractedItems = parseJSON(response.text || "[]", []);
+      const itemsWithIds = extractedItems.map((item: any) => ({
+        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: item.name || '',
+        quantity: item.quantity || '1',
+        type: item.type || 'Desconhecido'
+      }));
+
+      setMerchantItems(itemsWithIds);
+      setCurrentStep('MERCHANT_CONFIRM');
+    } catch (err) {
+      console.error(err);
+      setError("Erro ao ler o inventário. Tente imagens mais claras.");
+      setCurrentStep('MERCHANT_INPUT');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const runMerchantAnalysis = async () => {
+    setIsLoading(true);
+    setError(null);
+    setCurrentStep('MERCHANT_ANALYSIS');
+
+    try {
+      const prompt = `
         Você é o Mestre Mercador de The Witcher 3 (v4.0+).
-        Analise estas capturas de tela do inventário de Geralt.
+        Analise a seguinte lista de itens do inventário de Geralt.
         O jogador está atualmente em: ${merchantLocation}.
+        Nível do Jogador: ${userData.level}
+        Dinheiro Atual: ${userData.money} Coroas
+        
+        ITENS DO INVENTÁRIO:
+        ${JSON.stringify(merchantItems)}
         
         REGRAS DE ANÁLISE CRÍTICAS:
-        1. IDENTIFICAÇÃO VISUAL: Identifique os itens pelos ÍCONES, mesmo se o nome não estiver visível.
-        2. CONTEXTO DE LOCALIZAÇÃO: Recomende mercadores que o jogador pode acessar AGORA em ${merchantLocation}, ou sugira GUARDAR o item se houver um mercador muito melhor em uma região futura (ex: Novigrad ou Toussaint).
-        3. PRECISÃO DE MERCADORES: Seja específico sobre QUEM é o mercador e ONDE ele está. Ex: "Tomira (Herborista no Pomar Branco, leste da vila)".
-        4. ESTRATÉGIA DE VENDA: Para cada item de venda, decida se a estratégia é "Vender Agora" ou "Segurar para Depois".
-        5. CASO TOMIRA/MEL: Lembre-se que Tomira compra favos de mel por um preço premium, mas o jogador precisa falar com ela e às vezes completar a quest inicial de Pomar Branco para liberar certas interações comerciais.
-        6. Identifique itens que devem ser DESMONTADOS (ex: itens que dão Minério de Prata, Placas de Dimeritium, Couro de Monstro raro).
-        7. Identifique itens que devem ser GUARDADOS para crafting futuro.
-        8. Forneça estratégias de lucro (ex: como transformar joias em coroas, onde encontrar mercadores ricos).
-        9. Dê dicas gerais de economia no jogo.
+        1. CONTEXTO DE LOCALIZAÇÃO: Recomende mercadores que o jogador pode acessar AGORA em ${merchantLocation}, ou sugira GUARDAR o item se houver um mercador muito melhor em uma região futura (ex: Novigrad ou Toussaint).
+        2. PRECISÃO DE MERCADORES: Seja específico sobre QUEM é o mercador e ONDE ele está. Ex: "Tomira (Herborista no Pomar Branco, leste da vila)".
+        3. ESTRATÉGIA DE VENDA: Para cada item de venda, decida se a estratégia é "Vender Agora" ou "Segurar para Depois".
+        4. CASO TOMIRA/MEL: Lembre-se que Tomira compra favos de mel por um preço premium.
+        5. Identifique itens que devem ser DESMONTADOS (ex: itens que dão Minério de Prata, Placas de Dimeritium, Couro de Monstro raro).
+        6. Identifique itens que devem ser GUARDADOS para crafting futuro.
+        7. Forneça estratégias de lucro e dicas gerais de economia.
 
         Retorne um objeto JSON seguindo o esquema definido.
         Idioma: Português Brasileiro.
@@ -806,7 +957,7 @@ export default function App() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: { parts: [...parts, { text: prompt }] },
+        contents: prompt,
         config: { 
           responseMimeType: "application/json",
           responseSchema: {
@@ -908,7 +1059,7 @@ export default function App() {
     }
   };
 
-  const runGwentAnalysis = async () => {
+  const extractGwentCards = async () => {
     if (gwentImages.length === 0) {
       setError("Por favor, envie pelo menos uma imagem do seu baralho de Gwent.");
       return;
@@ -916,7 +1067,7 @@ export default function App() {
 
     setIsLoading(true);
     setError(null);
-    setCurrentStep('GWENT_ANALYSIS');
+    setCurrentStep('GWENT_OCR');
 
     try {
       const parts = gwentImages.map(img => ({
@@ -927,16 +1078,78 @@ export default function App() {
       }));
 
       const prompt = `
+        Você é um especialista em The Witcher 3 Next-Gen (v4.0+).
+        Analise estas capturas de tela das cartas de Gwent e extraia todas as cartas visíveis.
+        
+        ATENÇÃO - OTIMIZAÇÃO DE OCR PARA BAIXA QUALIDADE:
+        - As imagens podem estar borradas ou com muitos elementos visuais.
+        - Use o CONTEXTO (ícones, ilustrações, formato da carta) para deduzir cartas ilegíveis.
+        - Identifique o poder da carta se estiver visível.
+        - Classifique o tipo da carta (Unidade, Especial, Clima, Herói, Líder).
+
+        Retorne um array JSON de objetos.
+        Idioma: Português Brasileiro.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview", 
+        contents: { parts: [...parts, { text: prompt }] },
+        config: { 
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                type: { type: Type.STRING },
+                power: { type: Type.STRING }
+              },
+              required: ["name"]
+            }
+          }
+        }
+      });
+
+      const extractedCards = parseJSON(response.text || "[]", []);
+      const cardsWithIds = extractedCards.map((card: any) => ({
+        id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: card.name || '',
+        type: card.type || 'Desconhecido',
+        power: card.power || '0'
+      }));
+
+      setGwentCards(cardsWithIds);
+      setCurrentStep('GWENT_CONFIRM');
+    } catch (err) {
+      console.error(err);
+      setError("Erro ao ler as cartas. Tente imagens mais claras.");
+      setCurrentStep('GWENT_INPUT');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const runGwentAnalysis = async () => {
+    setIsLoading(true);
+    setError(null);
+    setCurrentStep('GWENT_ANALYSIS');
+
+    try {
+      const prompt = `
         Você é o Mestre de Gwent de The Witcher 3 (v4.0+).
-        Analise estas capturas de tela das cartas de Gwent do jogador.
+        Analise a seguinte lista de cartas de Gwent do jogador.
+        
+        CARTAS DO JOGADOR:
+        ${JSON.stringify(gwentCards)}
         
         REGRAS DE ANÁLISE CRÍTICAS:
-        1. IDENTIFICAÇÃO VISUAL: Identifique as cartas pelos ÍCONES e ILUSTRAÇÕES, mesmo se o nome não estiver visível.
-        2. MELHOR FACÇÃO: Determine qual facção (Reinos do Norte, Nilfgaard, Monstros, Scoia'tael ou Skellige) é a mais forte com base nas cartas disponíveis.
-        3. COMPOSIÇÃO DO BARALHO: Monte o baralho perfeito (mínimo 22 cartas de unidade).
-        4. ESTRATÉGIA DE JOGO: Explique detalhadamente como jogar com este baralho específico.
-        5. GUIA POR RODADA: Dê dicas para a Rodada 1, 2 e 3 (ex: quando passar, quando usar espiões).
-        6. SINERGIAS: Explique quais cartas funcionam bem juntas (ex: Comandante da Corneta + Unidades de Combate Próximo).
+        1. MELHOR FACÇÃO: Determine qual facção (Reinos do Norte, Nilfgaard, Monstros, Scoia'tael ou Skellige) é a mais forte com base nas cartas disponíveis.
+        2. COMPOSIÇÃO DO BARALHO: Monte o baralho perfeito (mínimo 22 cartas de unidade).
+        3. ESTRATÉGIA DE JOGO: Explique detalhadamente como jogar com este baralho específico.
+        4. GUIA POR RODADA: Dê dicas para a Rodada 1, 2 e 3 (ex: quando passar, quando usar espiões).
+        5. SINERGIAS: Explique quais cartas funcionam bem juntas (ex: Comandante da Corneta + Unidades de Combate Próximo).
 
         Retorne um objeto JSON seguindo o esquema definido.
         Use um tom de voz de um jogador de Gwent profissional e desafiador.
@@ -945,7 +1158,7 @@ export default function App() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: { parts: [...parts, { text: prompt }] },
+        contents: prompt,
         config: { 
           responseMimeType: "application/json",
           responseSchema: {
@@ -1060,7 +1273,7 @@ export default function App() {
     }
   };
 
-  const runBestiaryAnalysis = async () => {
+  const extractBestiaryTarget = async () => {
     if (bestiaryImages.length === 0) {
       setError("Por favor, envie pelo menos uma imagem do monstro ou do seu Bestiário.");
       return;
@@ -1068,7 +1281,7 @@ export default function App() {
 
     setIsLoading(true);
     setError(null);
-    setCurrentStep('BESTIARY_ANALYSIS');
+    setCurrentStep('BESTIARY_OCR');
 
     try {
       const parts = bestiaryImages.map(img => ({
@@ -1079,16 +1292,61 @@ export default function App() {
       }));
 
       const prompt = `
+        Você é um especialista em The Witcher 3 Next-Gen (v4.0+).
+        Analise estas capturas de tela e identifique qual é o monstro principal.
+        
+        ATENÇÃO - OTIMIZAÇÃO DE OCR PARA BAIXA QUALIDADE:
+        - As imagens podem estar borradas.
+        - Use o CONTEXTO (aparência do monstro, ambiente) para deduzir o nome se o texto estiver ilegível.
+
+        Retorne um objeto JSON com o nome do monstro.
+        Idioma: Português Brasileiro.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview", 
+        contents: { parts: [...parts, { text: prompt }] },
+        config: { 
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              monsterName: { type: Type.STRING }
+            },
+            required: ["monsterName"]
+          }
+        }
+      });
+
+      const extracted = parseJSON(response.text || "{}", { monsterName: "" });
+      setBestiaryTarget(extracted.monsterName || "Monstro Desconhecido");
+      setCurrentStep('BESTIARY_CONFIRM');
+    } catch (err) {
+      console.error(err);
+      setError("Erro ao identificar o monstro. Tente imagens mais claras.");
+      setCurrentStep('BESTIARY_INPUT');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const runBestiaryAnalysis = async () => {
+    setIsLoading(true);
+    setError(null);
+    setCurrentStep('BESTIARY_ANALYSIS');
+
+    try {
+      const prompt = `
         Você é o Mestre do Bestiário de The Witcher 3 (v4.0+).
-        Analise estas capturas de tela de um monstro ou de uma entrada do Bestiário.
+        Analise o seguinte monstro: ${bestiaryTarget}.
         
         REGRAS DE ANÁLISE CRÍTICAS:
-        1. IDENTIFICAÇÃO VISUAL: Identifique o monstro pela aparência, mesmo se o nome não estiver visível.
-        2. FRAQUEZAS PRECISAS: Liste todos os Óleos, Sinais, Bombas e Poções que são eficazes contra este monstro específico.
-        3. ESTRATÉGIA DE COMBATE: Explique como Geralt deve lutar contra ele (ex: quando esquivar, qual sinal usar para abrir a guarda).
-        4. LORE E CURIOSIDADES: Forneça um resumo fascinante sobre a origem e o comportamento do monstro.
-        5. LOOT: Liste os itens raros que este monstro costuma deixar e para que servem no crafting.
-        6. LOCALIZAÇÕES: Onde mais este monstro pode ser encontrado no mundo do jogo.
+        1. FRAQUEZAS PRECISAS: Liste todos os Óleos, Sinais, Bombas e Poções que são eficazes contra este monstro específico.
+        2. ESTRATÉGIA DE COMBATE: Explique como Geralt deve lutar contra ele (ex: quando esquivar, qual sinal usar para abrir a guarda).
+        3. LORE E CURIOSIDADES: Forneça um resumo fascinante sobre a origem e o comportamento do monstro.
+        4. LOOT: Liste os itens raros que este monstro costuma deixar e para que servem no crafting.
+        5. LOCALIZAÇÕES: Onde mais este monstro pode ser encontrado no mundo do jogo.
 
         Retorne um objeto JSON seguindo o esquema definido.
         Use um tom de voz de um Witcher experiente que já enfrentou centenas dessas criaturas.
@@ -1097,7 +1355,7 @@ export default function App() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: { parts: [...parts, { text: prompt }] },
+        contents: prompt,
         config: { 
           tools: [{ googleSearch: {} }],
           toolConfig: { includeServerSideToolInvocations: true },
@@ -1185,12 +1443,14 @@ export default function App() {
         O usuário está procurando por: "${finderQuery}".
         Nível atual do Geralt: ${userData.level}.
         Localização atual: ${userData.location || 'Desconhecida'}.
+        Regiões Desbloqueadas: ${userData.accessibleLocations.join(', ')}.
+        Dinheiro Atual: ${userData.money} Coroas.
         
         Forneça um guia definitivo, passo a passo e à prova de falhas de como conseguir esse item, material, arma, armadura, comida ou objetivo da melhor forma possível.
         
         REGRAS DE ANÁLISE CRÍTICAS:
         1. LOCALIZAÇÕES EXATAS: Diga exatamente onde ir (região, ponto de viagem rápida mais próximo, vendedor específico).
-        2. ADEQUAÇÃO AO NÍVEL: Considere o nível ${userData.level} do jogador. Não mande um jogador nível 5 para Skellige enfrentar um monstro nível 30, a menos que seja a única forma (e avise do perigo).
+        2. ADEQUAÇÃO AO NÍVEL E ACESSO: Considere o nível ${userData.level} e as regiões desbloqueadas. Não mande para uma região que ele não tem acesso ainda, a menos que seja a única forma.
         3. PASSO A PASSO: Crie um guia claro de como obter o item.
         4. ALTERNATIVAS: Se o item for muito difícil de conseguir agora, sugira alternativas viáveis para o nível atual.
         5. DICAS DE FARM/ECONOMIA: Como conseguir mais disso de forma eficiente?
@@ -1263,7 +1523,7 @@ export default function App() {
     }
   };
 
-  const runGearAnalysis = async () => {
+  const extractGearItems = async () => {
     if (gearImages.length === 0) {
       setError("Por favor, envie pelo menos uma imagem do seu inventário ou de um diagrama de equipamento.");
       return;
@@ -1271,7 +1531,7 @@ export default function App() {
 
     setIsLoading(true);
     setError(null);
-    setCurrentStep('GEAR_ANALYSIS');
+    setCurrentStep('GEAR_OCR');
 
     try {
       const parts = gearImages.map(img => ({
@@ -1282,15 +1542,84 @@ export default function App() {
       }));
 
       const prompt = `
+        Você é um especialista em The Witcher 3 Next-Gen (v4.0+).
+        Analise estas capturas de tela e extraia os itens de equipamento ou diagramas visíveis.
+        
+        ATENÇÃO - OTIMIZAÇÃO DE OCR PARA BAIXA QUALIDADE:
+        - As imagens podem estar borradas ou com muitos elementos visuais.
+        - Use o CONTEXTO (ícones, formato do texto) para deduzir palavras ilegíveis.
+        - Classifique o tipo do item (Armadura, Espada, Diagrama, Material).
+        - Identifique a categoria do item: "Equipado" (se Geralt estiver usando), "Diagrama" (se for uma receita de craft) ou "Inventário" (se for um item guardado).
+
+        Retorne um array JSON de objetos.
+        Idioma: Português Brasileiro.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview", 
+        contents: { parts: [...parts, { text: prompt }] },
+        config: { 
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                type: { type: Type.STRING },
+                category: { type: Type.STRING }
+              },
+              required: ["name"]
+            }
+          }
+        }
+      });
+
+      const extractedItems = parseJSON(response.text || "[]", []);
+      const itemsWithIds = extractedItems.map((item: any) => ({
+        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: item.name || '',
+        type: item.type || 'Desconhecido',
+        category: item.category || 'Inventário'
+      }));
+
+      setGearItems(itemsWithIds);
+      setCurrentStep('GEAR_CONFIRM');
+    } catch (err) {
+      console.error(err);
+      setError("Erro ao ler os equipamentos. Tente imagens mais claras.");
+      setCurrentStep('GEAR_INPUT');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const runGearAnalysis = async () => {
+    setIsLoading(true);
+    setError(null);
+    setCurrentStep('GEAR_ANALYSIS');
+
+    try {
+      const prompt = `
         Você é o Mestre Armeiro de The Witcher 3 (v4.0+).
-        Analise estas capturas de tela de equipamentos ou diagramas.
+        Analise a seguinte lista de equipamentos ou diagramas do jogador.
+        
+        Nível do Jogador: ${userData.level}
+        Localização Atual: ${userData.location || 'Desconhecida'}
+        Dinheiro Atual: ${userData.money} Coroas
+        
+        ITENS DO JOGADOR:
+        ${JSON.stringify(gearItems)}
         
         REGRAS DE ANÁLISE CRÍTICAS:
-        1. IDENTIFICAÇÃO DE ESCOLA: Identifique se o equipamento pertence a uma das escolas de Witcher (Lobo, Gato, Grifo, Urso, Mantícora, Víbora).
-        2. LOCALIZAÇÃO DE DIAGRAMAS: Use sua base de conhecimento para dizer onde encontrar as próximas melhorias para este conjunto específico.
-        3. REQUISITOS DE CRAFTING: Liste os materiais raros necessários e qual nível de armeiro/ferreiro é exigido.
-        4. ATRIBUTOS E BUILD: Explique para qual tipo de build este conjunto é melhor (ex: build de sinais, build de ataque rápido).
-        5. COMPARAÇÃO: Diga se vale a pena trocar o equipamento atual por este novo diagrama.
+        1. ANÁLISE DE NÍVEL: Compare rigorosamente o nível do jogador (${userData.level}) com os requisitos de nível dos equipamentos e diagramas.
+        2. EQUIPADO VS DIAGRAMA: Analise o que o jogador tem "Equipado" versus os "Diagramas" disponíveis.
+        3. RECOMENDAÇÃO DE CRAFTING: Recomende O QUE craftar AGORA. Se o jogador tiver um diagrama melhor que o equipamento atual E tiver o nível necessário, mande craftar.
+        4. IDENTIFICAÇÃO DE ESCOLA: Identifique se o equipamento pertence a uma das escolas de Witcher (Lobo, Gato, Grifo, Urso, Mantícora, Víbora).
+        5. LOCALIZAÇÃO DE DIAGRAMAS: Diga onde encontrar as próximas melhorias para os conjuntos identificados.
+        6. REQUISITOS DE CRAFTING: Liste os materiais raros necessários e qual nível de armeiro/ferreiro é exigido para as recomendações.
+        7. ATRIBUTOS E BUILD: Explique para qual tipo de build este conjunto é melhor.
 
         Retorne um objeto JSON seguindo o esquema definido.
         Use um tom de voz de um armeiro mestre como Yoana ou Hattori.
@@ -1299,7 +1628,7 @@ export default function App() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: { parts: [...parts, { text: prompt }] },
+        contents: prompt,
         config: { 
           tools: [{ googleSearch: {} }],
           toolConfig: { includeServerSideToolInvocations: true },
@@ -1307,6 +1636,20 @@ export default function App() {
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              currentGearEvaluation: { type: Type.STRING },
+              craftingRecommendations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    itemName: { type: Type.STRING },
+                    reason: { type: Type.STRING },
+                    materialsNeeded: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    crafterLevelRequired: { type: Type.STRING }
+                  },
+                  required: ["itemName", "reason", "materialsNeeded", "crafterLevelRequired"]
+                }
+              },
               schoolName: { type: Type.STRING },
               description: { type: Type.STRING },
               sets: {
@@ -1336,7 +1679,7 @@ export default function App() {
               recommendedBuild: { type: Type.STRING },
               humor: { type: Type.STRING }
             },
-            required: ["schoolName", "description", "sets", "craftingTips", "recommendedBuild", "humor"]
+            required: ["currentGearEvaluation", "craftingRecommendations", "schoolName", "description", "sets", "craftingTips", "recommendedBuild", "humor"]
           }
         }
       });
@@ -1344,6 +1687,7 @@ export default function App() {
       const result = parseJSON(response.text || "{}", {});
       result.sets = result.sets || [];
       result.craftingTips = result.craftingTips || [];
+      result.craftingRecommendations = result.craftingRecommendations || [];
       
       setGearAnalysis(result);
       setCurrentStep('GEAR_DASHBOARD');
@@ -1372,10 +1716,7 @@ export default function App() {
             reader.onload = (event) => {
               const base64 = event.target?.result as string;
               if (appMode === 'QUESTS') {
-                setUserData(prev => ({
-                  ...prev,
-                  images: [...prev.images, base64]
-                }));
+                setImages(prev => [...prev, base64]);
               } else if (appMode === 'MERCHANT') {
                 setMerchantImages(prev => [...prev, base64]);
               } else if (appMode === 'GWENT') {
@@ -1461,6 +1802,7 @@ export default function App() {
 
           <div className="flex flex-col items-start space-y-4">
             {[
+              { id: 'PROFILE', label: 'Perfil do Bruxo', step: 'PROFILE_DASHBOARD', icon: <User className="w-6 h-6" /> },
               { id: 'QUESTS', label: 'Mestre de Missões', step: 'INPUT', icon: <Scroll className="w-6 h-6" /> },
               { id: 'MERCHANT', label: 'Mestre Mercador', step: 'MERCHANT_INPUT', icon: <MapIcon className="w-6 h-6" /> },
               { id: 'GWENT', label: 'Estrategista de Gwent', step: 'GWENT_INPUT', icon: <Trophy className="w-6 h-6" /> },
@@ -1530,7 +1872,7 @@ export default function App() {
           <p className="text-sm text-gray-400">Envie imagens do seu Log de Missões, Mapa e Objetivos Atuais.</p>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {userData.images.map((img, i) => (
+            {images.map((img, i) => (
               <div key={i} className="relative group aspect-video rounded border border-witcher-gold/30 overflow-hidden">
                 <img src={img} alt="Upload" className="w-full h-full object-cover" />
                 <button 
@@ -1560,7 +1902,7 @@ export default function App() {
                 <input 
                   type="number" 
                   value={userData.level} 
-                  onChange={e => setUserData(prev => ({ ...prev, level: parseInt(e.target.value) }))}
+                  onChange={e => updateUserData({ level: parseInt(e.target.value) })}
                   className="witcher-input w-full"
                 />
               </div>
@@ -1570,7 +1912,7 @@ export default function App() {
                   type="text" 
                   placeholder="Ex: Velen, Novigrad..."
                   value={userData.location} 
-                  onChange={e => setUserData(prev => ({ ...prev, location: e.target.value }))}
+                  onChange={e => updateUserData({ location: e.target.value })}
                   className="witcher-input w-full"
                 />
               </div>
@@ -1586,7 +1928,7 @@ export default function App() {
                 <label className="text-xs uppercase tracking-widest text-witcher-gold/60">Tolerância a Spoilers</label>
                 <select 
                   value={userData.spoilerTolerance}
-                  onChange={e => setUserData(prev => ({ ...prev, spoilerTolerance: e.target.value as any }))}
+                  onChange={e => updateUserData({ spoilerTolerance: e.target.value as any })}
                   className="witcher-input w-full"
                 >
                   <option value="None">Sem Spoilers (Apenas Dicas)</option>
@@ -1600,10 +1942,9 @@ export default function App() {
                     <input 
                       type="checkbox" 
                       checked={val} 
-                      onChange={() => setUserData(prev => ({ 
-                        ...prev, 
-                        toggles: { ...prev.toggles, [key]: !val } 
-                      }))}
+                      onChange={() => updateUserData({ 
+                        toggles: { ...userData.toggles, [key]: !val } 
+                      })}
                       className="hidden"
                     />
                     <div className={`w-5 h-5 rounded border border-witcher-gold/50 flex items-center justify-center transition-colors ${val ? 'bg-witcher-gold' : 'bg-transparent'}`}>
@@ -1620,7 +1961,7 @@ export default function App() {
         <div className="pt-4 flex justify-center">
           <button 
             onClick={runOCR}
-            disabled={userData.images.length === 0 || isLoading}
+            disabled={images.length === 0 || isLoading}
             className="witcher-button flex items-center gap-3 px-12"
           >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ChevronRight className="w-5 h-5" />}
@@ -1761,6 +2102,307 @@ export default function App() {
           <div className="flex gap-4">
             <button onClick={() => setCurrentStep('INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5">Voltar</button>
             <button onClick={runAnalysis} className="witcher-button">Analisar</button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const renderMerchantConfirm = () => (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-6xl mx-auto space-y-8"
+    >
+      <div className="text-center space-y-2">
+        <h1 className="text-4xl">Verificação de Inventário</h1>
+        <p className="text-witcher-gold/60">Revise os itens extraídos das suas capturas de tela.</p>
+      </div>
+
+      <div className="parchment-card p-6">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-bottom border-witcher-gold/30 text-witcher-gold uppercase text-xs tracking-widest">
+                <th className="p-4">Nome do Item</th>
+                <th className="p-4">Quantidade</th>
+                <th className="p-4">Tipo</th>
+                <th className="p-4">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-witcher-gold/10">
+              {merchantItems.map((item, idx) => (
+                <tr key={item.id} className="hover:bg-witcher-gold/5 transition-colors">
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
+                      value={item.name}
+                      onChange={e => {
+                        const newItems = [...merchantItems];
+                        newItems[idx].name = e.target.value;
+                        setMerchantItems(newItems);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-24"
+                      value={item.quantity}
+                      onChange={e => {
+                        const newItems = [...merchantItems];
+                        newItems[idx].quantity = e.target.value;
+                        setMerchantItems(newItems);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
+                      value={item.type}
+                      onChange={e => {
+                        const newItems = [...merchantItems];
+                        newItems[idx].type = e.target.value;
+                        setMerchantItems(newItems);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <button 
+                      onClick={() => setMerchantItems(merchantItems.filter(i => i.id !== item.id))}
+                      className="text-red-500 hover:text-red-400"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-6 flex justify-between items-center">
+          <button 
+            onClick={() => setMerchantItems([...merchantItems, { id: `item-${Date.now()}`, name: '', quantity: '1', type: '' }])}
+            className="flex items-center gap-2 text-witcher-gold hover:text-white transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" /> Adicionar Item Manualmente
+          </button>
+          
+          <div className="flex gap-4">
+            <button onClick={() => setCurrentStep('MERCHANT_INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5">Voltar</button>
+            <button onClick={runMerchantAnalysis} className="witcher-button">Analisar</button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const renderGwentConfirm = () => (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-6xl mx-auto space-y-8"
+    >
+      <div className="text-center space-y-2">
+        <h1 className="text-4xl">Verificação do Baralho</h1>
+        <p className="text-witcher-gold/60">Revise as cartas extraídas das suas capturas de tela.</p>
+      </div>
+
+      <div className="parchment-card p-6">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-bottom border-witcher-gold/30 text-witcher-gold uppercase text-xs tracking-widest">
+                <th className="p-4">Nome da Carta</th>
+                <th className="p-4">Tipo</th>
+                <th className="p-4">Poder</th>
+                <th className="p-4">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-witcher-gold/10">
+              {gwentCards.map((card, idx) => (
+                <tr key={card.id} className="hover:bg-witcher-gold/5 transition-colors">
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
+                      value={card.name}
+                      onChange={e => {
+                        const newCards = [...gwentCards];
+                        newCards[idx].name = e.target.value;
+                        setGwentCards(newCards);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
+                      value={card.type}
+                      onChange={e => {
+                        const newCards = [...gwentCards];
+                        newCards[idx].type = e.target.value;
+                        setGwentCards(newCards);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-24"
+                      value={card.power}
+                      onChange={e => {
+                        const newCards = [...gwentCards];
+                        newCards[idx].power = e.target.value;
+                        setGwentCards(newCards);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <button 
+                      onClick={() => setGwentCards(gwentCards.filter(c => c.id !== card.id))}
+                      className="text-red-500 hover:text-red-400"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-6 flex justify-between items-center">
+          <button 
+            onClick={() => setGwentCards([...gwentCards, { id: `card-${Date.now()}`, name: '', type: '', power: '0' }])}
+            className="flex items-center gap-2 text-witcher-gold hover:text-white transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" /> Adicionar Carta Manualmente
+          </button>
+          
+          <div className="flex gap-4">
+            <button onClick={() => setCurrentStep('GWENT_INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5">Voltar</button>
+            <button onClick={runGwentAnalysis} className="witcher-button">Analisar</button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const renderBestiaryConfirm = () => (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-2xl mx-auto space-y-8"
+    >
+      <div className="text-center space-y-2">
+        <h1 className="text-4xl">Verificação do Bestiário</h1>
+        <p className="text-witcher-gold/60">Confirme o monstro identificado.</p>
+      </div>
+
+      <div className="parchment-card p-6 space-y-6">
+        <div>
+          <label className="block text-witcher-gold text-sm font-bold mb-2">Nome do Monstro</label>
+          <input 
+            type="text"
+            className="w-full bg-black/40 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none transition-colors"
+            value={bestiaryTarget}
+            onChange={(e) => setBestiaryTarget(e.target.value)}
+          />
+        </div>
+
+        <div className="flex justify-end gap-4">
+          <button onClick={() => setCurrentStep('BESTIARY_INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5">Voltar</button>
+          <button onClick={runBestiaryAnalysis} className="witcher-button">Analisar</button>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const renderGearConfirm = () => (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-6xl mx-auto space-y-8"
+    >
+      <div className="text-center space-y-2">
+        <h1 className="text-4xl">Verificação de Equipamentos</h1>
+        <p className="text-witcher-gold/60">Revise os equipamentos e diagramas extraídos.</p>
+      </div>
+
+      <div className="parchment-card p-6">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-bottom border-witcher-gold/30 text-witcher-gold uppercase text-xs tracking-widest">
+                <th className="p-4">Nome do Item</th>
+                <th className="p-4">Tipo</th>
+                <th className="p-4">Categoria</th>
+                <th className="p-4">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-witcher-gold/10">
+              {gearItems.map((item, idx) => (
+                <tr key={item.id} className="hover:bg-witcher-gold/5 transition-colors">
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
+                      value={item.name}
+                      onChange={e => {
+                        const newItems = [...gearItems];
+                        newItems[idx].name = e.target.value;
+                        setGearItems(newItems);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <input 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
+                      value={item.type}
+                      onChange={e => {
+                        const newItems = [...gearItems];
+                        newItems[idx].type = e.target.value;
+                        setGearItems(newItems);
+                      }}
+                    />
+                  </td>
+                  <td className="p-4">
+                    <select 
+                      className="bg-transparent border-none focus:ring-1 focus:ring-witcher-gold rounded w-full"
+                      value={item.category || 'Inventário'}
+                      onChange={e => {
+                        const newItems = [...gearItems];
+                        newItems[idx].category = e.target.value;
+                        setGearItems(newItems);
+                      }}
+                    >
+                      <option value="Equipado">Equipado</option>
+                      <option value="Diagrama">Diagrama</option>
+                      <option value="Inventário">Inventário</option>
+                    </select>
+                  </td>
+                  <td className="p-4">
+                    <button 
+                      onClick={() => setGearItems(gearItems.filter(i => i.id !== item.id))}
+                      className="text-red-500 hover:text-red-400"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-6 flex justify-between items-center">
+          <button 
+            onClick={() => setGearItems([...gearItems, { id: `item-${Date.now()}`, name: '', type: '', category: 'Inventário' }])}
+            className="flex items-center gap-2 text-witcher-gold hover:text-white transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" /> Adicionar Item Manualmente
+          </button>
+          
+          <div className="flex gap-4">
+            <button onClick={() => setCurrentStep('GEAR_INPUT')} className="px-6 py-2 border border-witcher-gold/30 rounded hover:bg-white/5">Voltar</button>
+            <button onClick={runGearAnalysis} className="witcher-button">Analisar</button>
           </div>
         </div>
       </div>
@@ -2129,7 +2771,7 @@ export default function App() {
                   if (confirm("Deseja meditar e limpar esta análise?")) {
                     setAnalysis(null);
                     setQuests([]);
-                    setUserData(prev => ({ ...prev, images: [] }));
+                    setImages([]);
                     setCurrentStep('INPUT');
                   }
                 }}
@@ -2554,7 +3196,7 @@ export default function App() {
 
         <div className="pt-4 flex justify-center">
           <button 
-            onClick={runMerchantAnalysis}
+            onClick={extractMerchantItems}
             disabled={merchantImages.length === 0 || isLoading}
             className="witcher-button flex items-center gap-3 px-12"
           >
@@ -2626,7 +3268,7 @@ export default function App() {
 
         <div className="pt-4 flex justify-center">
           <button 
-            onClick={runGwentAnalysis}
+            onClick={extractGwentCards}
             disabled={gwentImages.length === 0 || isLoading}
             className="witcher-button flex items-center gap-3 px-12"
           >
@@ -2844,7 +3486,7 @@ export default function App() {
               type="number" 
               min="1" max="100"
               value={userData.level}
-              onChange={(e) => setUserData({...userData, level: parseInt(e.target.value) || 1})}
+              onChange={(e) => updateUserData({ level: parseInt(e.target.value) || 1 })}
               className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none"
             />
           </div>
@@ -2852,7 +3494,7 @@ export default function App() {
             <label className="text-sm font-bold text-witcher-gold/80 uppercase tracking-wider">Localização Atual</label>
             <select 
               value={userData.location}
-              onChange={(e) => setUserData({...userData, location: e.target.value})}
+              onChange={(e) => updateUserData({ location: e.target.value })}
               className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none"
             >
               <option value="">Desconhecida / Qualquer</option>
@@ -3064,9 +3706,25 @@ export default function App() {
           </div>
         </section>
 
+        <section className="space-y-4 pt-4 border-t border-witcher-gold/10">
+          <h2 className="text-2xl flex items-center gap-2">
+            <Activity className="w-6 h-6" /> 2. Nível Atual
+          </h2>
+          <p className="text-sm text-gray-400">Informe o nível atual do Geralt para que o Mestre Armeiro possa recomendar o que craftar agora.</p>
+          <div className="w-32">
+            <input 
+              type="number" 
+              min="1" max="100"
+              value={userData.level}
+              onChange={(e) => updateUserData({ level: parseInt(e.target.value) || 1 })}
+              className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none text-center text-xl font-bold"
+            />
+          </div>
+        </section>
+
         <div className="pt-4 flex justify-center">
           <button 
-            onClick={runGearAnalysis}
+            onClick={extractGearItems}
             disabled={gearImages.length === 0 || isLoading}
             className="witcher-button flex items-center gap-3 px-12"
           >
@@ -3164,6 +3822,48 @@ export default function App() {
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
+            
+            {gearAnalysis.currentGearEvaluation && (
+              <section className="parchment-card p-8 border-l-4 border-witcher-gold">
+                <h2 className="text-2xl mb-4 flex items-center gap-3 text-witcher-gold">
+                  <Activity className="w-6 h-6" /> Avaliação do Equipamento Atual
+                </h2>
+                <p className="text-gray-300 leading-relaxed">
+                  {gearAnalysis.currentGearEvaluation}
+                </p>
+              </section>
+            )}
+
+            {gearAnalysis.craftingRecommendations && gearAnalysis.craftingRecommendations.length > 0 && (
+              <section className="parchment-card p-8">
+                <h2 className="text-3xl mb-6 flex items-center gap-3 text-green-400">
+                  <Hammer className="w-8 h-8" /> O Que Craftar Agora
+                </h2>
+                <div className="space-y-4">
+                  {gearAnalysis.craftingRecommendations.map((rec, i) => (
+                    <div key={i} className="p-4 bg-black/40 rounded border border-green-500/30">
+                      <h4 className="text-lg font-bold text-white mb-2">{rec.itemName}</h4>
+                      <p className="text-sm text-gray-300 mb-3">{rec.reason}</p>
+                      <div className="flex flex-col md:flex-row gap-4 text-xs">
+                        <div className="flex-1">
+                          <span className="text-witcher-gold/60 uppercase tracking-wider block mb-1">Materiais:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {rec.materialsNeeded.map((mat, j) => (
+                              <span key={j} className="px-2 py-1 bg-witcher-gold/10 text-witcher-gold rounded border border-witcher-gold/20">{mat}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-witcher-gold/60 uppercase tracking-wider block mb-1">Nível do Artesão:</span>
+                          <span className="text-gray-300">{rec.crafterLevelRequired}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {gearAnalysis.sets.map((set, i) => (
               <section key={i} className="parchment-card p-8">
                 <h2 className="text-3xl mb-6 flex items-center gap-3">
@@ -3285,7 +3985,7 @@ export default function App() {
 
         <div className="pt-4 flex justify-center">
           <button 
-            onClick={runBestiaryAnalysis}
+            onClick={extractBestiaryTarget}
             disabled={bestiaryImages.length === 0 || isLoading}
             className="witcher-button flex items-center gap-3 px-12"
           >
@@ -3646,6 +4346,84 @@ export default function App() {
     );
   };
 
+  const renderProfile = () => {
+    const regions = ['Pomar Branco', 'Velen', 'Novigrad', 'Skellige', 'Kaer Morhen', 'Toussaint'];
+    
+    const toggleRegion = (region: string) => {
+      updateUserData({
+        accessibleLocations: userData.accessibleLocations.includes(region)
+          ? userData.accessibleLocations.filter(r => r !== region)
+          : [...userData.accessibleLocations, region]
+      });
+    };
+
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto space-y-8 pb-20">
+        <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="p-4 rounded-full border-2 border-witcher-gold/30 bg-witcher-gold/10">
+              <User className="w-12 h-12 text-witcher-gold" />
+            </div>
+          </div>
+          <h1 className="text-5xl font-bold">Perfil do Bruxo</h1>
+          <p className="text-witcher-gold/70 italic">"Mantenha seus dados atualizados para análises mais precisas."</p>
+          {!user ? (
+            <button onClick={loginWithGoogle} className="witcher-button flex items-center gap-2 mx-auto mt-4">
+              <LogIn className="w-5 h-5" /> Fazer Login para Salvar
+            </button>
+          ) : (
+            <button onClick={logout} className="flex items-center gap-2 mx-auto mt-4 text-red-400 hover:text-red-300">
+              <LogOut className="w-4 h-4" /> Sair da Conta
+            </button>
+          )}
+        </div>
+
+        <div className="parchment-card p-8 space-y-8">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <h3 className="text-2xl text-witcher-gold font-cinzel border-b border-witcher-gold/20 pb-2">Status Geral</h3>
+              
+              <div>
+                <label className="block text-sm font-bold text-witcher-gold/80 uppercase tracking-wider mb-2">Nível Atual</label>
+                <input type="number" min="1" max="100" value={userData.level} onChange={e => updateUserData({ level: parseInt(e.target.value) || 1 })} className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-witcher-gold/80 uppercase tracking-wider mb-2">Coroas (Dinheiro)</label>
+                <input type="number" min="0" value={userData.money} onChange={e => updateUserData({ money: parseInt(e.target.value) || 0 })} className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-witcher-gold/80 uppercase tracking-wider mb-2">Localização Atual</label>
+                <select value={userData.location} onChange={e => updateUserData({ location: e.target.value })} className="w-full bg-black/50 border border-witcher-gold/30 rounded p-3 text-white focus:border-witcher-gold outline-none">
+                  {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-2xl text-witcher-gold font-cinzel border-b border-witcher-gold/20 pb-2">Regiões Desbloqueadas</h3>
+              <div className="space-y-2">
+                {regions.map(region => (
+                  <label key={region} className="flex items-center gap-3 p-3 bg-black/30 rounded border border-witcher-gold/10 cursor-pointer hover:bg-witcher-gold/5 transition-colors">
+                    <input type="checkbox" checked={userData.accessibleLocations.includes(region)} onChange={() => toggleRegion(region)} className="w-5 h-5 rounded border-witcher-gold/30 bg-black/40 text-witcher-gold focus:ring-witcher-gold" />
+                    <span className="text-gray-200">{region}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-witcher-gold/20 flex justify-center">
+            <button onClick={() => { setAppMode(null as any); setCurrentStep('MAIN_MENU'); }} className="witcher-button px-12">
+              Voltar ao Menu Principal
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <div className="min-h-screen p-4 md:p-8">
       <AnimatePresence mode="wait">
@@ -3655,13 +4433,24 @@ export default function App() {
 
       {currentStep !== 'MAIN_MENU' && (
         <>
-          <nav className="max-w-4xl mx-auto mb-12 flex justify-center gap-4 flex-wrap">
+          <nav className="absolute top-0 left-0 w-full p-6 flex justify-between items-center z-50 pointer-events-auto">
             <button 
               onClick={() => setCurrentStep('MAIN_MENU')}
-              className="flex items-center gap-2 px-6 py-3 rounded-full font-cinzel transition-all border-2 bg-transparent text-witcher-gold border-witcher-gold/30 hover:border-witcher-gold/60 mr-auto"
+              className="flex items-center gap-2 px-4 py-2 rounded-full font-cinzel transition-all border border-witcher-gold/30 bg-black/50 text-witcher-gold hover:bg-witcher-gold/20"
             >
-              <Eye className="w-5 h-5" /> Menu Principal
+              <Eye className="w-4 h-4" /> Voltar ao Menu
             </button>
+            <button 
+              onClick={() => {
+                setAppMode('PROFILE');
+                setCurrentStep('PROFILE_DASHBOARD');
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-full font-cinzel transition-all border border-witcher-gold/30 bg-black/50 text-witcher-gold hover:bg-witcher-gold/20"
+            >
+              <User className="w-4 h-4" /> Nv. {userData.level} | {userData.money} <Coins className="w-4 h-4 inline"/>
+            </button>
+          </nav>
+          <nav className="max-w-5xl mx-auto mb-12 mt-16 flex justify-center gap-4 flex-wrap">
             <button 
               onClick={() => {
                 setAppMode('QUESTS');
@@ -3751,7 +4540,9 @@ export default function App() {
           </nav>
 
           <main className="container mx-auto">
-            {appMode === 'QUESTS' ? (
+            {appMode === 'PROFILE' ? (
+              renderProfile()
+            ) : appMode === 'QUESTS' ? (
               <>
                 {currentStep === 'INPUT' && renderInput()}
                 {currentStep === 'OCR' && <div className="h-64" />}
@@ -3762,18 +4553,24 @@ export default function App() {
             ) : appMode === 'MERCHANT' ? (
               <>
                 {currentStep === 'MERCHANT_INPUT' && renderMerchantInput()}
+                {currentStep === 'MERCHANT_OCR' && <div className="h-64" />}
+                {currentStep === 'MERCHANT_CONFIRM' && renderMerchantConfirm()}
                 {currentStep === 'MERCHANT_ANALYSIS' && <div className="h-64" />}
                 {currentStep === 'MERCHANT_DASHBOARD' && renderMerchantDashboard()}
               </>
             ) : appMode === 'GWENT' ? (
               <>
                 {currentStep === 'GWENT_INPUT' && renderGwentInput()}
+                {currentStep === 'GWENT_OCR' && <div className="h-64" />}
+                {currentStep === 'GWENT_CONFIRM' && renderGwentConfirm()}
                 {currentStep === 'GWENT_ANALYSIS' && <div className="h-64" />}
                 {currentStep === 'GWENT_DASHBOARD' && renderGwentDashboard()}
               </>
             ) : appMode === 'BESTIARY' ? (
               <>
                 {currentStep === 'BESTIARY_INPUT' && renderBestiaryInput()}
+                {currentStep === 'BESTIARY_OCR' && <div className="h-64" />}
+                {currentStep === 'BESTIARY_CONFIRM' && renderBestiaryConfirm()}
                 {currentStep === 'BESTIARY_ANALYSIS' && <div className="h-64" />}
                 {currentStep === 'BESTIARY_DASHBOARD' && renderBestiaryDashboard()}
               </>
@@ -3786,6 +4583,8 @@ export default function App() {
             ) : (
               <>
                 {currentStep === 'GEAR_INPUT' && renderGearInput()}
+                {currentStep === 'GEAR_OCR' && <div className="h-64" />}
+                {currentStep === 'GEAR_CONFIRM' && renderGearConfirm()}
                 {currentStep === 'GEAR_ANALYSIS' && <div className="h-64" />}
                 {currentStep === 'GEAR_DASHBOARD' && renderGearDashboard()}
               </>

@@ -1,6 +1,6 @@
 {
   "name": "Witcher 3 Quest Master - Next-Gen",
-  "description": "Companheiro avançado de missões para The Witcher 3, com OCR de capturas de tela, análise de escolhas e controle de spoilers.",
+  "description": "Companheiro avançado para The Witcher 3 com OCR, análise de escolhas, controle de spoilers e sincronização de perfil na nuvem com Firebase.",
   "requestFramePermissions": [
     "camera"
   ]

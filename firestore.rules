@@ -1,0 +1,81 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required) - The user's Firebase Auth UID
+    //   - level: number (required) - Geralt's current level (1-100)
+    //   - location: string (required) - Geralt's current location
+    //   - accessibleLocations: list (required) - List of unlocked regions
+    //   - money: number (required) - Amount of crowns (>= 0)
+    //   - spoilerTolerance: string (required) - 'None', 'Minor', or 'Full'
+    //   - toggles: map (required) - {main: bool, secondary: bool, contracts: bool}
+    //   - updatedAt: timestamp (optional) - Timestamp of last update
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+    
+    function isValidUserProfile(data) {
+      let allowedKeys = ['uid', 'level', 'location', 'accessibleLocations', 'money', 'spoilerTolerance', 'toggles', 'updatedAt'];
+      let hasRequired = data.keys().hasAll(['uid', 'level', 'location', 'accessibleLocations', 'money', 'spoilerTolerance', 'toggles']);
+      
+      let validLevel = data.level is number && data.level >= 1 && data.level <= 100;
+      let validLocation = data.location is string && data.location.size() <= 100;
+      let validMoney = data.money is number && data.money >= 0;
+      let validSpoiler = data.spoilerTolerance in ['None', 'Minor', 'Full'];
+      
+      let validAccessibleLocations = data.accessibleLocations is list && data.accessibleLocations.size() <= 20;
+      let validToggles = data.toggles is map && data.toggles.keys().hasOnly(['main', 'secondary', 'contracts']) &&
+                         data.toggles.main is bool && data.toggles.secondary is bool && data.toggles.contracts is bool;
+                         
+      let validUpdatedAt = !('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt is string;
+
+      return data.keys().hasOnly(allowedKeys) && hasRequired && validLevel && validLocation && validMoney && validSpoiler && validAccessibleLocations && validToggles && validUpdatedAt;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data) && uidUnchanged();
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data) && uidNotModified();
+      allow delete: if isOwner(userId);
+    }
+  }
+}

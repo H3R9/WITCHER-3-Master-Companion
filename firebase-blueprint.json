@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile data including Witcher 3 game progress and settings.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user's Firebase Auth UID."
+        },
+        "level": {
+          "type": "number",
+          "description": "Geralt's current level."
+        },
+        "location": {
+          "type": "string",
+          "description": "Geralt's current location."
+        },
+        "accessibleLocations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of regions the player has unlocked."
+        },
+        "money": {
+          "type": "number",
+          "description": "Amount of crowns the player has."
+        },
+        "spoilerTolerance": {
+          "type": "string",
+          "enum": ["None", "Minor", "Full"],
+          "description": "User's preference for spoilers."
+        },
+        "toggles": {
+          "type": "object",
+          "properties": {
+            "main": { "type": "boolean" },
+            "secondary": { "type": "boolean" },
+            "contracts": { "type": "boolean" }
+          },
+          "description": "Quest type filters."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last update."
+        }
+      },
+      "required": ["uid", "level", "location", "accessibleLocations", "money", "spoilerTolerance", "toggles"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores user profiles keyed by their Firebase Auth UID."
+    }
+  }
+}
